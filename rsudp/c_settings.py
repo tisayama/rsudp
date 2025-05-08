@@ -170,6 +170,36 @@ class Settings(dict):
         settings["telegram"]["extra_text"] = ""
         settings["telegram"]["upload_timeout"] = 10
 
+        # googlechat section
+        settings["googlechat"] = {}
+        settings["googlechat"]["enabled"] = False
+        settings["googlechat"]["webhook_url"] = "n/a"
+        settings["googlechat"]["extra_text"] = ""
+
+        # discord section
+        settings["discord"] = {}
+        settings["discord"]["enabled"] = False
+        settings["discord"]["webhook_url"] = "n/a"
+        settings["discord"]["use_embed"] = True  # Default to using embeds
+        settings["discord"]["send_images"] = True # Default to sending images
+        settings["discord"]["extra_text"] = ""
+
+        # sns section
+        settings["sns"] = {}
+        settings["sns"]["enabled"] = False
+        settings["sns"]["topic_arn"] = "n/a"
+        settings["sns"]["aws_access_key_id"] = None # Default to None to use Boto3 default chain
+        settings["sns"]["aws_secret_access_key"] = None # Default to None
+        settings["sns"]["aws_region"] = "n/a" # Region is generally required
+        settings["sns"]["extra_text"] = ""
+
+        # line section
+        settings["line"] = {}
+        settings["line"]["enabled"] = False
+        settings["line"]["channel_access_token"] = "n/a"
+        settings["line"]["to_ids"] = "" # Comma-separated User/Group/Room IDs
+        settings["line"]["extra_text"] = ""
+
         # rsam section
         settings["rsam"] = {}
         settings["rsam"]["enabled"] = False

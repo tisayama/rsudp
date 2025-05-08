@@ -13,6 +13,8 @@ dependencies:
   - lxml
   - sqlalchemy
   - obspy
+  - requests # Add requests library
+  - boto3 # Add AWS SDK
   - pip:
     - aiohttp==3.6.2
     - async-timeout==3.0.1
@@ -25,4 +27,5 @@ dependencies:
     - twython==3.7.0
     - urllib3==1.24.2
     - yarl==1.4.2
+    - line-bot-sdk # Add LINE Bot SDK
     - rsudp

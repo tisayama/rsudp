@@ -23,6 +23,10 @@ from rsudp.c_alertsound import AlertSound
 from rsudp.c_custom import Custom
 from rsudp.c_tweet import Tweeter
 from rsudp.c_telegram import Telegrammer
+from rsudp.c_googlechat import GoogleChatter # Import GoogleChatter
+from rsudp.c_discord import Discorder       # Import Discorder
+from rsudp.c_sns import SNSNotifier         # Import SNSNotifier
+from rsudp.c_line import LINENotifier       # Import LINENotifier
 from rsudp.c_rsam import RSAM
 from rsudp.c_testing import Testing
 from rsudp.t_testdata import TestData
@@ -374,6 +378,72 @@ def run(settings, debug):
 								   send_images=send_images, extra_text=extra_text,
 								   sender=sender, upload_timeout=upload_timeout, testing=TESTING)
 			mk_p(TELEGRAM)
+
+	if settings['googlechat']['enabled']:
+		webhook_url = settings['googlechat']['webhook_url']
+		extra_text = settings['googlechat']['extra_text']
+		if webhook_url != "n/a":
+			q = mk_q()
+			gchatter = GoogleChatter(q=q, webhook_url=webhook_url,
+								  extra_text=extra_text, testing=TESTING)
+			mk_p(gchatter)
+		else:
+			printW("GoogleChat enabled but webhook_url is 'n/a'. Skipping.", sender=SENDER)
+
+	if settings['discord']['enabled']:
+		webhook_url = settings['discord']['webhook_url']
+		use_embed = settings['discord']['use_embed']
+		send_images = settings['discord']['send_images']
+		extra_text = settings['discord']['extra_text']
+		if webhook_url != "n/a":
+			q = mk_q()
+			discorder = Discorder(q=q, webhook_url=webhook_url, use_embed=use_embed,
+								  send_images=send_images, extra_text=extra_text, testing=TESTING)
+			mk_p(discorder)
+		else:
+			printW("Discord enabled but webhook_url is 'n/a'. Skipping.", sender=SENDER)
+
+	if settings['sns']['enabled']:
+		topic_arn = settings['sns']['topic_arn']
+		aws_access_key_id = settings['sns'].get('aws_access_key_id') # Use .get for optional keys
+		aws_secret_access_key = settings['sns'].get('aws_secret_access_key')
+		aws_region = settings['sns']['aws_region']
+		extra_text = settings['sns']['extra_text']
+		if topic_arn != "n/a" and aws_region != "n/a":
+			q = mk_q()
+			sns_notifier = SNSNotifier(q=q, topic_arn=topic_arn,
+									   aws_access_key_id=aws_access_key_id,
+									   aws_secret_access_key=aws_secret_access_key,
+									   aws_region=aws_region,
+									   extra_text=extra_text, testing=TESTING)
+			# Only add to threads if initialization was successful (client created)
+			if sns_notifier.sns_client:
+				mk_p(sns_notifier)
+			else:
+				printW("SNSNotifier thread not started due to client initialization failure.", sender=SENDER)
+		else:
+			printW("SNS enabled but topic_arn or aws_region is 'n/a'. Skipping.", sender=SENDER)
+
+	if settings['line']['enabled']:
+		channel_access_token = settings['line']['channel_access_token']
+		to_ids_str = settings['line']['to_ids']
+		extra_text = settings['line']['extra_text']
+		if channel_access_token != "n/a" and to_ids_str:
+			try:
+				q = mk_q()
+				line_notifier = LINENotifier(q=q, channel_access_token=channel_access_token,
+											 to_ids_str=to_ids_str, extra_text=extra_text,
+											 testing=TESTING)
+				# Only add to threads if initialization was successful (client created)
+				if line_notifier.line_bot_api or TESTING: # Allow adding in testing mode even if client fails
+					mk_p(line_notifier)
+				else:
+					printW("LINENotifier thread not started due to client initialization failure.", sender=SENDER)
+			except ValueError as e: # Catch ValueError from __init__ if IDs are invalid
+				printE(f"Failed to initialize LINENotifier: {e}", sender=SENDER)
+		else:
+			printW("LINE enabled but channel_access_token is 'n/a' or to_ids is empty. Skipping.", sender=SENDER)
+
 
 	if settings['rsam']['enabled']:
 		# put settings in namespace

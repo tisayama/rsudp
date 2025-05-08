@@ -47,6 +47,11 @@ TEST = {
 	'c_tweetimg':			['Twitter image message       ', False],
 	'c_telegram':			['Telegram text message       ', False],
 	'c_telegramimg':		['Telegram image              ', False],
+	'c_googlechat':			['Google Chat message sending ', False], # Add Google Chat test entry
+	'c_discord':			['Discord embed message       ', False], # Add Discord test entry
+	'c_discordimg':			['Discord image attachment    ', False], # Add Discord image test entry
+	'c_sns':				['SNS message publishing      ', False], # Add SNS test entry
+	'c_line':				['LINE message sending        ', False], # Add LINE test entry
 	'c_forward':			['forwarding                  ', False],
 	'c_rsam':				['RSAM transmission           ', False],
 	'c_custom':				['custom code execution       ', False],
@@ -131,6 +136,27 @@ def make_test_settings(settings, inet=False):
 
 	settings['telegram']['enabled'] = True
 	settings['tweets']['enabled'] = True
+
+	# Enable Google Chat for testing
+	settings['googlechat']['enabled'] = True
+	settings['googlechat']['webhook_url'] = 'http://localhost/test_googlechat' # Dummy URL
+
+	# Enable Discord for testing
+	settings['discord']['enabled'] = True
+	settings['discord']['webhook_url'] = 'http://localhost/test_discord' # Dummy URL
+	settings['discord']['use_embed'] = True
+	settings['discord']['send_images'] = True
+
+	# Enable SNS for testing
+	settings['sns']['enabled'] = True
+	settings['sns']['topic_arn'] = 'arn:aws:sns:us-east-1:000000000000:rsudp-test-topic' # Dummy ARN
+	settings['sns']['aws_region'] = 'us-east-1' # Dummy Region for testing
+	# Leave aws keys as None to rely on default chain (or mock in future unit tests)
+
+	# Enable LINE for testing
+	settings['line']['enabled'] = True
+	settings['line']['channel_access_token'] = 'dummy_test_token' # Dummy Token
+	settings['line']['to_ids'] = 'Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' # Dummy User ID
 
 	settings['alertsound']['enabled'] = True
 
