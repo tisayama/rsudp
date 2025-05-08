@@ -9,7 +9,7 @@ from linebot.v3.messaging import (
     TextMessage,
     ApiException
 )
-from linebot.v3.exceptions import LineBotApiError
+# Removed incorrect import: from linebot.v3.exceptions import LineBotApiError
 
 from rsudp import printM, printW, printE, helpers
 import rsudp.raspberryshake as rs
@@ -132,10 +132,10 @@ class LINENotifier(rs.ConsumerThread):
                 printM('Testing mode: Message prepared for LINE but not sent.', self.sender)
                 TEST['c_line'][1] = True # Mark as success in testing
 
-        except ApiException as e:
+        except ApiException as e: # Catch the correct exception type
             printE(f"LINE API Error: Status={e.status}, Body={e.body}", self.sender)
             TEST['c_line'][1] = False
-        except Exception as e:
+        except Exception as e: # Keep catching other potential errors
             printE(f"Unexpected error sending LINE message: {e}", self.sender)
             TEST['c_line'][1] = False
 
