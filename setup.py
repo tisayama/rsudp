@@ -22,7 +22,10 @@ setuptools.setup(
                       'matplotlib>3.2,<4',
                       'pydub',
                       'twython',
-                      'python-telegram-bot>=20,<21'],
+                      'python-telegram-bot>=20,<21',
+                      'requests', # For Google Chat, Discord
+                      'boto3',    # For AWS SNS
+                      'line-bot-sdk'], # For LINE
     entry_points = {
         'console_scripts': [
             'rs-packetloss=rsudp.packetloss:main',
