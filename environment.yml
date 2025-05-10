@@ -15,6 +15,7 @@ dependencies:
   - obspy
   - requests # Add requests library
   - boto3 # Add AWS SDK
+  - pyqt5
   - pip:
     - aiohttp==3.6.2
     - async-timeout==3.0.1
@@ -29,3 +30,4 @@ dependencies:
     - yarl==1.4.2
     - line-bot-sdk # Add LINE Bot SDK
     - rsudp
+    - pyqt5==5.15.11
