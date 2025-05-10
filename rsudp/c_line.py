@@ -12,7 +12,7 @@ from linebot.v3.messaging import (
     MessagingApi,
     PushMessageRequest,
     TextMessage,
-    ImageSendMessage, # Added for sending images
+    ImageMessage, # Corrected class name
     ApiException
 )
 # Removed incorrect import: from linebot.v3.exceptions import LineBotApiError
@@ -285,7 +285,7 @@ class LINENotifier(rs.ConsumerThread):
         if s3_image_url:
             try:
                 # For LINE, preview URL must also be HTTPS and accessible
-                image_message = ImageSendMessage(
+                image_message = ImageMessage( # Corrected class name
                     original_content_url=s3_image_url,
                     preview_image_url=s3_image_url # Using the same URL for preview
                 )
