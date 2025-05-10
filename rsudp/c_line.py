@@ -1,6 +1,10 @@
 import sys
+import os # For os.path.basename
 import time
 from datetime import timezone, timedelta # For JST conversion
+import boto3 # For S3 upload
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
+from botocore.config import Config as BotoConfig # For S3 timeout
 from linebot.v3 import WebhookHandler
 from linebot.v3.messaging import (
     Configuration,
@@ -8,6 +12,7 @@ from linebot.v3.messaging import (
     MessagingApi,
     PushMessageRequest,
     TextMessage,
+    ImageSendMessage, # Added for sending images
     ApiException
 )
 # Removed incorrect import: from linebot.v3.exceptions import LineBotApiError
@@ -30,7 +35,10 @@ class LINENotifier(rs.ConsumerThread):
         testing (bool, optional): If True, runs in testing mode without actually sending messages. Defaults to False.
     """
     def __init__(self, channel_access_token, to_ids_str, q=False,
-                 extra_text=False, testing=False):
+                 extra_text=False, testing=False,
+                 send_images=False, s3_bucket_name=None, s3_object_key_prefix=None,
+                 s3_aws_region=None, s3_upload_timeout_seconds=3,
+                 aws_access_key_id=None, aws_secret_access_key=None): # Added S3 params
         super().__init__()
         if not q:
             printE('LINENotifier: Queue is required.', self.sender)
@@ -64,23 +72,64 @@ class LINENotifier(rs.ConsumerThread):
         # self.message0_template is now generated dynamically in _when_alarm
         self.last_message_object = None
 
+        # S3 Image Settings
+        self.send_images = send_images
+        self.s3_bucket_name = s3_bucket_name
+        self.s3_object_key_prefix = s3_object_key_prefix if s3_object_key_prefix else "rsudp/line/"
+        self.s3_aws_region = s3_aws_region
+        self.s3_upload_timeout_seconds = s3_upload_timeout_seconds
+        self.s3_client = None
+
         # Initialize LINE Bot SDK client
         self.line_bot_api = None
         if not self.testing:
             try:
                 configuration = Configuration(access_token=self.channel_access_token)
                 self.line_bot_api = MessagingApi(ApiClient(configuration))
-                # Optionally test the connection/token here if needed, e.g., get bot info
-                # profile = self.line_bot_api.get_profile(user_id) # Requires a valid user ID
                 printM("LINE Bot API client initialized.", self.sender)
             except Exception as e:
                 printE(f"Failed to initialize LINE Bot API client: {e}", self.sender)
-                self.alive = False # Prevent thread from running
+                self.alive = False
+
+        # Initialize S3 client if image sending is enabled
+        if self.send_images and self.s3_bucket_name and self.alive:
+            try:
+                boto_config = BotoConfig(
+                    connect_timeout=self.s3_upload_timeout_seconds,
+                    read_timeout=self.s3_upload_timeout_seconds,
+                    retries={'max_attempts': 1}
+                )
+                if aws_access_key_id and aws_secret_access_key:
+                    printM(f"Initializing Boto3 S3 client with provided credentials for region {self.s3_aws_region or 'default'}.", self.sender)
+                    self.s3_client = boto3.client(
+                        's3',
+                        aws_access_key_id=aws_access_key_id,
+                        aws_secret_access_key=aws_secret_access_key,
+                        region_name=self.s3_aws_region,
+                        config=boto_config
+                    )
+                else:
+                    printM(f"Initializing Boto3 S3 client using default credential chain for region {self.s3_aws_region or 'default'}.", self.sender)
+                    self.s3_client = boto3.client('s3', region_name=self.s3_aws_region, config=boto_config)
+                printM("Boto3 S3 client initialized for LINENotifier.", self.sender)
+            except (NoCredentialsError, PartialCredentialsError):
+                printE("AWS credentials not found for S3. Image sending will be disabled for LINE.", self.sender)
+                self.s3_client = None
+            except ClientError as e:
+                printE(f"AWS ClientError during S3 client initialization for LINE: {e}. Image sending will be disabled.", self.sender)
+                self.s3_client = None
+            except Exception as e:
+                printE(f"Unexpected error during S3 client initialization for LINE: {e}. Image sending will be disabled.", self.sender)
+                self.s3_client = None
+        elif self.send_images and not self.s3_bucket_name:
+            printW("send_images is true for LINE but s3_bucket_name is not configured. Image sending will be disabled.", self.sender)
+            self.send_images = False
+
 
         if self.alive:
             printM('Starting.', self.sender)
         else:
-             printE("Failed to start due to LINE Bot API client initialization issues.", self.sender)
+             printE("Failed to start due to client initialization issues.", self.sender)
 
 
     def getq(self):
@@ -184,10 +233,71 @@ class LINENotifier(rs.ConsumerThread):
         message_object = TextMessage(text=message_text)
         self._send_line_message(message_object)
 
+    def _upload_image_to_s3(self, local_file_path, object_key_name):
+        """Uploads an image to S3 and returns its public URL."""
+        if not self.s3_client:
+            printE("S3 client not initialized for LINE, cannot upload image.", self.sender)
+            return None
+        try:
+            printM(f"Uploading {local_file_path} to S3 bucket {self.s3_bucket_name} as {object_key_name} for LINE", self.sender)
+            self.s3_client.upload_file(local_file_path, self.s3_bucket_name, object_key_name, ExtraArgs={'ACL': 'public-read'})
+            
+            s3_region_for_url = self.s3_aws_region or self.s3_client.meta.region_name
+            if not s3_region_for_url:
+                 s3_region_for_url = "us-east-1" # Defaulting
+
+            if '.' in self.s3_bucket_name:
+                 public_url = f"https://s3-{s3_region_for_url}.amazonaws.com/{self.s3_bucket_name}/{object_key_name}"
+            else:
+                 public_url = f"https://{self.s3_bucket_name}.s3.{s3_region_for_url}.amazonaws.com/{object_key_name}"
+            
+            printM(f"Image uploaded to S3 for LINE: {public_url}", self.sender)
+            return public_url
+        except FileNotFoundError:
+            printE(f"Local image file not found for LINE S3 upload: {local_file_path}", self.sender)
+            return None
+        except (NoCredentialsError, PartialCredentialsError):
+            printE("AWS credentials not found for LINE S3 upload.", self.sender)
+            return None
+        except ClientError as e:
+            printE(f"S3 ClientError during LINE image upload: {e}", self.sender)
+            return None
+        except Exception as e:
+            printE(f"Failed to upload image to S3 for LINE: {e}", self.sender)
+            return None
+
     def _when_img(self, d):
-        """Image handling - Not implemented as per user request."""
-        printM('Ignoring IMGPATH message (image sending disabled for LINE).', self.sender)
-        pass
+        """Actions to take when an IMGPATH message is received."""
+        if not self.send_images or not self.s3_client:
+            if self.send_images and not self.s3_client:
+                printW("Image sending enabled for LINE but S3 client not available. Skipping image.", self.sender)
+            # else send_images is false, so normal to ignore
+            return
+
+        local_image_path = helpers.get_msg_path(d)
+        if not os.path.exists(local_image_path):
+            printW(f'Could not find image for LINE: {local_image_path}', self.sender)
+            return
+
+        object_key = self.s3_object_key_prefix + os.path.basename(local_image_path)
+        s3_image_url = self._upload_image_to_s3(local_image_path, object_key)
+
+        if s3_image_url:
+            try:
+                # For LINE, preview URL must also be HTTPS and accessible
+                image_message = ImageSendMessage(
+                    original_content_url=s3_image_url,
+                    preview_image_url=s3_image_url # Using the same URL for preview
+                )
+                self._send_line_message(image_message)
+                TEST['c_lineimg'][1] = True # Assuming a test key like 'c_lineimg'
+            except Exception as e:
+                printE(f"Failed to create or send LINE ImageSendMessage: {e}", self.sender)
+                TEST['c_lineimg'][1] = False
+        else:
+            printW(f"Failed to upload image {local_image_path} to S3 for LINE. No image message sent.", self.sender)
+            TEST['c_lineimg'][1] = False
+
 
     def run(self):
         """Main loop to process messages from the queue."""

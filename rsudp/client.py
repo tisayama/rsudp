@@ -382,10 +382,24 @@ def run(settings, debug):
 	if settings['googlechat']['enabled']:
 		webhook_url = settings['googlechat']['webhook_url']
 		extra_text = settings['googlechat']['extra_text']
+		send_images = settings['googlechat'].get('send_images', False)
+		s3_bucket_name = settings['googlechat'].get('s3_bucket_name')
+		s3_object_key_prefix = settings['googlechat'].get('s3_object_key_prefix')
+		s3_aws_region = settings['googlechat'].get('s3_aws_region')
+		s3_upload_timeout_seconds = settings['googlechat'].get('s3_upload_timeout_seconds', 3)
+		aws_access_key_id = settings['googlechat'].get('aws_access_key_id')
+		aws_secret_access_key = settings['googlechat'].get('aws_secret_access_key')
+
 		if webhook_url != "n/a":
 			q = mk_q()
 			gchatter = GoogleChatter(q=q, webhook_url=webhook_url,
-								  extra_text=extra_text, testing=TESTING)
+								  extra_text=extra_text, testing=TESTING,
+								  send_images=send_images, s3_bucket_name=s3_bucket_name,
+								  s3_object_key_prefix=s3_object_key_prefix,
+								  s3_aws_region=s3_aws_region,
+								  s3_upload_timeout_seconds=s3_upload_timeout_seconds,
+								  aws_access_key_id=aws_access_key_id,
+								  aws_secret_access_key=aws_secret_access_key)
 			mk_p(gchatter)
 		else:
 			printW("GoogleChat enabled but webhook_url is 'n/a'. Skipping.", sender=SENDER)
@@ -428,12 +442,26 @@ def run(settings, debug):
 		channel_access_token = settings['line']['channel_access_token']
 		to_ids_str = settings['line']['to_ids']
 		extra_text = settings['line']['extra_text']
+		send_images = settings['line'].get('send_images', False) # Default to False if not specified
+		s3_bucket_name = settings['line'].get('s3_bucket_name')
+		s3_object_key_prefix = settings['line'].get('s3_object_key_prefix')
+		s3_aws_region = settings['line'].get('s3_aws_region')
+		s3_upload_timeout_seconds = settings['line'].get('s3_upload_timeout_seconds', 3)
+		aws_access_key_id = settings['line'].get('aws_access_key_id')
+		aws_secret_access_key = settings['line'].get('aws_secret_access_key')
+
 		if channel_access_token != "n/a" and to_ids_str:
 			try:
 				q = mk_q()
 				line_notifier = LINENotifier(q=q, channel_access_token=channel_access_token,
 											 to_ids_str=to_ids_str, extra_text=extra_text,
-											 testing=TESTING)
+											 testing=TESTING, send_images=send_images,
+											 s3_bucket_name=s3_bucket_name,
+											 s3_object_key_prefix=s3_object_key_prefix,
+											 s3_aws_region=s3_aws_region,
+											 s3_upload_timeout_seconds=s3_upload_timeout_seconds,
+											 aws_access_key_id=aws_access_key_id,
+											 aws_secret_access_key=aws_secret_access_key)
 				# Only add to threads if initialization was successful (client created)
 				if line_notifier.line_bot_api or TESTING: # Allow adding in testing mode even if client fails
 					mk_p(line_notifier)

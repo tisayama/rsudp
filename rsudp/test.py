@@ -47,11 +47,13 @@ TEST = {
 	'c_tweetimg':			['Twitter image message       ', False],
 	'c_telegram':			['Telegram text message       ', False],
 	'c_telegramimg':		['Telegram image              ', False],
-	'c_googlechat':			['Google Chat message sending ', False], # Add Google Chat test entry
-	'c_discord':			['Discord embed message       ', False], # Add Discord test entry
-	'c_discordimg':			['Discord image attachment    ', False], # Add Discord image test entry
-	'c_sns':				['SNS message publishing      ', False], # Add SNS test entry
-	'c_line':				['LINE message sending        ', False], # Add LINE test entry
+	'c_googlechat':			['Google Chat message sending ', False],
+	'c_googlechatimg':		['Google Chat S3 image link   ', False], # For S3 image link in Google Chat
+	'c_discord':			['Discord embed message       ', False],
+	'c_discordimg':			['Discord image attachment    ', False], # Direct Discord image upload
+	'c_sns':				['SNS message publishing      ', False],
+	'c_line':				['LINE message sending        ', False],
+	'c_lineimg':			['LINE S3 image message       ', False], # For S3 image in LINE
 	'c_forward':			['forwarding                  ', False],
 	'c_rsam':				['RSAM transmission           ', False],
 	'c_custom':				['custom code execution       ', False],
@@ -140,6 +142,10 @@ def make_test_settings(settings, inet=False):
 	# Enable Google Chat for testing
 	settings['googlechat']['enabled'] = True
 	settings['googlechat']['webhook_url'] = 'http://localhost/test_googlechat' # Dummy URL
+	settings['googlechat']['send_images'] = True
+	settings['googlechat']['s3_bucket_name'] = 'rsudp-test-bucket'
+	settings['googlechat']['s3_aws_region'] = 'us-east-1'
+	settings['googlechat']['s3_upload_timeout_seconds'] = 1 # Quick timeout for testing
 
 	# Enable Discord for testing
 	settings['discord']['enabled'] = True
@@ -157,6 +163,10 @@ def make_test_settings(settings, inet=False):
 	settings['line']['enabled'] = True
 	settings['line']['channel_access_token'] = 'dummy_test_token' # Dummy Token
 	settings['line']['to_ids'] = 'Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' # Dummy User ID
+	settings['line']['send_images'] = True
+	settings['line']['s3_bucket_name'] = 'rsudp-test-bucket' # Use same dummy bucket for testing
+	settings['line']['s3_aws_region'] = 'us-east-1'
+	settings['line']['s3_upload_timeout_seconds'] = 1 # Quick timeout for testing
 
 	settings['alertsound']['enabled'] = True
 

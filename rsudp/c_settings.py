@@ -175,6 +175,13 @@ class Settings(dict):
         settings["googlechat"]["enabled"] = False
         settings["googlechat"]["webhook_url"] = "n/a"
         settings["googlechat"]["extra_text"] = ""
+        settings["googlechat"]["send_images"] = False # Default to no S3 images for Google Chat
+        settings["googlechat"]["s3_bucket_name"] = None
+        settings["googlechat"]["s3_object_key_prefix"] = "rsudp/googlechat/"
+        settings["googlechat"]["s3_aws_region"] = None
+        settings["googlechat"]["s3_upload_timeout_seconds"] = 3
+        settings["googlechat"]["aws_access_key_id"] = None
+        settings["googlechat"]["aws_secret_access_key"] = None
 
         # discord section
         settings["discord"] = {}
@@ -199,6 +206,13 @@ class Settings(dict):
         settings["line"]["channel_access_token"] = "n/a"
         settings["line"]["to_ids"] = "" # Comma-separated User/Group/Room IDs
         settings["line"]["extra_text"] = ""
+        settings["line"]["send_images"] = True # Default to S3 images for LINE if S3 is configured
+        settings["line"]["s3_bucket_name"] = None
+        settings["line"]["s3_object_key_prefix"] = "rsudp/line/"
+        settings["line"]["s3_aws_region"] = None
+        settings["line"]["s3_upload_timeout_seconds"] = 3
+        settings["line"]["aws_access_key_id"] = None # Specific to LINE's S3 usage
+        settings["line"]["aws_secret_access_key"] = None # Specific to LINE's S3 usage
 
         # rsam section
         settings["rsam"] = {}
