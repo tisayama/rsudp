@@ -1,5 +1,6 @@
 import sys
 import time
+from datetime import timezone, timedelta # For JST conversion
 from linebot.v3 import WebhookHandler
 from linebot.v3.messaging import (
     Configuration,
@@ -46,8 +47,9 @@ class LINENotifier(rs.ConsumerThread):
         self.alive = True
         self.channel_access_token = channel_access_token
         self.testing = testing
-        self.fmt = '%Y-%m-%d %H:%M:%S.%f'
-        self.region_info = f' - region: {rs.region.title()}' if rs.region else ''
+        self.fmt = '%Y-%m-%d %H:%M:%S.%f' # Original format for parsing
+        self.jst_fmt = '%Y年%m月%d日 %H時%M分%S秒 (JST)' # JST format for display
+        self.region_text = f"{rs.region.title()}地方" if rs.region else "不明な地域"
         self.extra_text = helpers.resolve_extra_text(extra_text, max_len=4500, sender=self.sender) # LINE text limit is 5000 chars
 
         # Parse and validate target IDs
@@ -59,7 +61,7 @@ class LINENotifier(rs.ConsumerThread):
 
 
         self.livelink = f'https://stationview.raspberryshake.org/#?net={rs.net}&sta={rs.stn}'
-        self.message0_template = f'(Raspberry Shake station {rs.net}.{rs.stn}{self.region_info}) Event detected at'
+        # self.message0_template is now generated dynamically in _when_alarm
         self.last_message_object = None
 
         # Initialize LINE Bot SDK client
@@ -143,19 +145,41 @@ class LINENotifier(rs.ConsumerThread):
 
     def _when_alarm(self, d):
         """Actions to take when an ALARM message is received."""
-        event_time = helpers.fsec(helpers.get_msg_time(d))
-        last_event_str = f'{event_time.strftime(self.fmt)[:22]}'
+        event_time_utc_obspy = helpers.fsec(helpers.get_msg_time(d))
 
-        # Create simple text message
-        message_text = f"{self.message0_template} {last_event_str} UTC.\n"
+        # Convert to JST
+        py_datetime_utc = event_time_utc_obspy.datetime
+        jst_tz = timezone(timedelta(hours=9))
+        event_time_jst = py_datetime_utc.astimezone(jst_tz)
+        jst_time_str = event_time_jst.strftime(self.jst_fmt)
+
+        message_parts = [
+            "【地震イベント検知】",
+            f"発生時刻: {jst_time_str}\n",
+            "詳細は以下のリンクをご確認ください:",
+            f"{self.livelink}"
+        ]
         if self.extra_text:
-            message_text += f"{self.extra_text}\n"
-        message_text += f"Live Feed: {self.livelink}"
+            # Ensure extra_text is treated as a string and prepended with a newline if it's not empty
+            message_parts.append(f"\n{str(self.extra_text).strip()}")
 
-        # Ensure message length is within LINE limits (though checked in extra_text, double check final)
-        if len(message_text) > 5000:
-            message_text = message_text[:4997] + "..."
-            printW("Message truncated to fit LINE limit.", self.sender)
+        message_parts.extend([
+            "\n---",
+            "観測点情報:",
+            f"ステーションID: {rs.net}.{rs.stn}",
+            f"地域: {self.region_text}"
+        ])
+        
+        message_text = "\n".join(message_parts)
+
+        # Ensure message length is within LINE limits
+        if len(message_text.encode('utf-8')) > 4950: # A bit of buffer for safety for 5000 char limit
+            printW(f"Message too long for LINE ({len(message_text.encode('utf-8'))} bytes), attempting to truncate.", self.sender)
+            # Basic truncation, might need more sophisticated logic for multi-byte chars
+            while len(message_text.encode('utf-8')) > 4950:
+                message_text = message_text[:-10] # Remove 10 chars at a time
+            message_text += "..."
+            printW(f"Message truncated to {len(message_text.encode('utf-8'))} bytes.", self.sender)
 
         message_object = TextMessage(text=message_text)
         self._send_line_message(message_object)

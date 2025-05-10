@@ -3,6 +3,7 @@ import time
 import json # Though not strictly needed for simple string messages, good to have if future enhancements use JSON
 import boto3 # AWS SDK for Python
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError, ClientError
+from datetime import timezone, timedelta # For JST conversion
 
 from rsudp import printM, printW, printE, helpers
 import rsudp.raspberryshake as rs
@@ -43,12 +44,12 @@ class SNSNotifier(rs.ConsumerThread):
         self.topic_arn = topic_arn
         self.aws_region = aws_region
         self.testing = testing
-        self.fmt = '%Y-%m-%d %H:%M:%S.%f'
-        self.region_info = f' - region: {rs.region.title()}' if rs.region else ''
-        self.extra_text = helpers.resolve_extra_text(extra_text, max_len=30000, sender=self.sender) # SNS message size limit is 256KB
+        self.fmt = '%Y-%m-%d %H:%M:%S.%f' # Original format for parsing
+        self.jst_fmt = '%Y年%m月%d日 %H時%M分%S秒 (JST)' # JST format for display
+        # self.region_info is not used in the simplified SNS message
+        self.extra_text = helpers.resolve_extra_text(extra_text, max_len=100, sender=self.sender) # Keep extra_text short for SMS
 
-        self.livelink = f'https://stationview.raspberryshake.org/#?net={rs.net}&sta={rs.stn}'
-        self.message0_template = f'(Raspberry Shake station {rs.net}.{rs.stn}{self.region_info}) Event detected at'
+        # self.livelink and self.message0_template are not used in the simplified SNS message
         self.last_message_body = None
 
         try:
@@ -140,13 +141,30 @@ class SNSNotifier(rs.ConsumerThread):
 
     def _when_alarm(self, d):
         """Actions to take when an ALARM message is received."""
-        event_time = helpers.fsec(helpers.get_msg_time(d))
-        last_event_str = f'{event_time.strftime(self.fmt)[:22]}'
-        
-        message_body = f"{self.message0_template} {last_event_str} UTC.\n"
+        event_time_utc_obspy = helpers.fsec(helpers.get_msg_time(d))
+
+        # Convert to JST
+        py_datetime_utc = event_time_utc_obspy.datetime
+        jst_tz = timezone(timedelta(hours=9))
+        event_time_jst = py_datetime_utc.astimezone(jst_tz)
+        jst_time_str = event_time_jst.strftime(self.jst_fmt)
+
+        message_parts = [
+            "【地震イベント検知】",
+            f"発生時刻: {jst_time_str}"
+        ]
         if self.extra_text:
-            message_body += f"{self.extra_text}\n"
-        message_body += f"Live Feed: {self.livelink}"
+            # Ensure extra_text is treated as a string and prepended with a newline if it's not empty
+            message_parts.append(f"\n{str(self.extra_text).strip()}")
+        
+        message_body = "\n".join(message_parts)
+        
+        # Ensure message is concise for SMS (though SNS itself has a large limit, SMS gateways might not)
+        # This is a basic truncation, more sophisticated handling might be needed if messages are still too long.
+        if len(message_body.encode('utf-8')) > 130: # Approximate for 140 byte SMS limit with some buffer
+            printW(f"SNS message potentially too long for SMS, consider shortening extra_text. Current length: {len(message_body.encode('utf-8'))} bytes", self.sender)
+            # Truncate if absolutely necessary, though ideally extra_text is kept short
+            # For now, we rely on extra_text being short as per its max_len in __init__
 
         self._send_sns_message(message_body)
 

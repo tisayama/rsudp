@@ -3,6 +3,7 @@ import os
 import time
 import requests # Dependency: Make sure 'requests' is installed
 import json # For creating embed objects
+from datetime import timezone, timedelta # For JST conversion
 
 from rsudp import printM, printW, printE, helpers
 import rsudp.raspberryshake as rs
@@ -40,13 +41,14 @@ class Discorder(rs.ConsumerThread):
         self.use_embed = use_embed
         self.send_images = send_images
         self.testing = testing
-        self.fmt = '%Y-%m-%d %H:%M:%S.%f'
-        self.region = f' - region: {rs.region.title()}' if rs.region else ''
+        self.fmt = '%Y-%m-%d %H:%M:%S.%f' # Original format for parsing
+        self.jst_fmt = '%Y年%m月%d日 %H時%M分%S秒 (JST)' # JST format for display
+        self.region_text = f"{rs.region.title()}地方" if rs.region else "不明な地域"
         # Resolve extra text, Discord limits are generally large, especially for embeds
         self.extra_text = helpers.resolve_extra_text(extra_text, max_len=2000, sender=self.sender) # Embed description limit is 4096, content is 2000
 
         self.livelink = f'https://stationview.raspberryshake.org/#?net={rs.net}&sta={rs.stn}'
-        self.message0 = f'Seismic Event Detected: {rs.net}.{rs.stn}{self.region}' # Used as embed title or part of text content
+        # self.message0 is now generated dynamically in _when_alarm
         self.last_message_payload = None
         self.last_message_files = None
 
@@ -142,30 +144,50 @@ class Discorder(rs.ConsumerThread):
 
     def _when_alarm(self, d):
         """Actions to take when an ALARM message is received."""
-        event_time = helpers.fsec(helpers.get_msg_time(d))
-        last_event_str = f'{event_time.strftime(self.fmt)[:22]}' # Format time
+        event_time_utc_obspy = helpers.fsec(helpers.get_msg_time(d))
+        
+        # Convert to JST
+        py_datetime_utc = event_time_utc_obspy.datetime
+        jst_tz = timezone(timedelta(hours=9))
+        event_time_jst = py_datetime_utc.astimezone(jst_tz)
+        jst_time_str = event_time_jst.strftime(self.jst_fmt)
+
         payload = {}
+        description_parts = [f"発生時刻: **{jst_time_str}**"]
+        if self.extra_text:
+            description_parts.append(str(self.extra_text).strip())
 
         if self.use_embed:
             embed = {
-                "title": self.message0,
-                "description": f"Event detected at **{last_event_str} UTC**.\n{self.extra_text}",
-                "color": 15105570, # Orange/Red color for alert
+                "title": "【地震イベント検知】",
+                "description": "\n".join(description_parts),
+                "color": 15277667, # Discord Orange
                 "fields": [
-                    {"name": "Station", "value": f"{rs.net}.{rs.stn}", "inline": True},
-                    {"name": "Region", "value": rs.region.title() if rs.region else "N/A", "inline": True},
-                    {"name": "Live Feed", "value": f"[StationView]({self.livelink})", "inline": False}
+                    {"name": "詳細リンク", "value": f"[StationView]({self.livelink})", "inline": False},
+                    {"name": "ステーションID", "value": f"{rs.net}.{rs.stn}", "inline": True},
+                    {"name": "地域", "value": self.region_text, "inline": True}
                 ],
-                "timestamp": event_time.isoformat() # Add timestamp to embed
+                "timestamp": event_time_jst.isoformat() # Use JST for timestamp
             }
             payload['embeds'] = [embed]
         else:
             # Simple text message
-            message = f"{self.message0} at {last_event_str} UTC\n"
-            message += f"Station: {rs.net}.{rs.stn}{self.region}\n"
-            message += f"{self.extra_text}\n"
-            message += f"Live Feed: <{self.livelink}>" # Use angle brackets for auto-linking in Discord
-            payload['content'] = message
+            message_parts = [
+                "【地震イベント検知】",
+                f"発生時刻: {jst_time_str}\n",
+                "詳細は以下のリンクをご確認ください:",
+                f"<{self.livelink}>" # Angle brackets for auto-linking
+            ]
+            if self.extra_text:
+                message_parts.append(f"\n{str(self.extra_text).strip()}")
+            
+            message_parts.extend([
+                "\n---",
+                "観測点情報:",
+                f"ステーションID: {rs.net}.{rs.stn}",
+                f"地域: {self.region_text}"
+            ])
+            payload['content'] = "\n".join(message_parts)
 
         self._send_message(payload=payload)
 
@@ -184,9 +206,9 @@ class Discorder(rs.ConsumerThread):
             with open(imgpath, 'rb') as image_file:
                 files = {'file': (os.path.basename(imgpath), image_file.read(), 'image/png')} # Assume PNG, adjust if needed
                 # Optionally add a simple message or embed with the image
-                payload = {'content': f"Image for event detected near {rs.net}.{rs.stn}"}
+                payload = {'content': f"地震イベントの画像 ({rs.net}.{rs.stn})"}
                 # Or create an embed describing the image
-                # embed = {"title": "Event Image", "image": {"url": f"attachment://{os.path.basename(imgpath)}"}}
+                # embed = {"title": "地震イベント画像", "image": {"url": f"attachment://{os.path.basename(imgpath)}"}}
                 # payload = {'embeds': [embed]}
 
                 self._send_message(payload=payload, files=files)

@@ -1,6 +1,7 @@
 import sys
 import time
 import requests  # Dependency: Make sure 'requests' is installed
+from datetime import timezone, timedelta # For JST conversion
 
 from rsudp import printM, printW, printE, helpers
 import rsudp.raspberryshake as rs
@@ -32,13 +33,13 @@ class GoogleChatter(rs.ConsumerThread):
         self.alive = True
         self.webhook_url = webhook_url
         self.testing = testing
-        self.fmt = '%Y-%m-%d %H:%M:%S.%f'
-        self.region = f' - region: {rs.region.title()}' if rs.region else ''
+        self.fmt = '%Y-%m-%d %H:%M:%S.%f' # Original format for parsing
+        self.jst_fmt = '%Y年%m月%d日 %H時%M分%S秒 (JST)' # JST format for display
+        self.region_text = f"{rs.region.title()}地方" if rs.region else "不明な地域"
         # Resolve extra text, ensuring it fits within potential Google Chat limits (though usually generous for text)
         self.extra_text = helpers.resolve_extra_text(extra_text, max_len=4000, sender=self.sender) # Google Chat limit is large
 
-        self.livelink = f'live feed ➡️ https://stationview.raspberryshake.org/#?net={rs.net}&sta={rs.stn}'
-        self.message0 = f'(Raspberry Shake station {rs.net}.{rs.stn}{self.region}) Event detected at'
+        self.livelink = f'https://stationview.raspberryshake.org/#?net={rs.net}&sta={rs.stn}' # Removed "live feed ➡️" for cleaner link
         self.last_message = False
 
         printM('Starting.', self.sender)
@@ -93,9 +94,32 @@ class GoogleChatter(rs.ConsumerThread):
 
     def _when_alarm(self, d):
         """Actions to take when an ALARM message is received."""
-        event_time = helpers.fsec(helpers.get_msg_time(d))
-        last_event_str = f'{event_time.strftime(self.fmt)[:22]}' # Format time
-        message = f'{self.message0} {last_event_str} UTC{self.extra_text} - {self.livelink}'
+        event_time_utc_obspy = helpers.fsec(helpers.get_msg_time(d))
+        
+        # Convert to JST
+        py_datetime_utc = event_time_utc_obspy.datetime
+        jst_tz = timezone(timedelta(hours=9))
+        event_time_jst = py_datetime_utc.astimezone(jst_tz)
+        jst_time_str = event_time_jst.strftime(self.jst_fmt)
+
+        message_parts = [
+            f"【地震イベント検知】",
+            f"発生時刻: {jst_time_str}\n",
+            f"詳細は以下のリンクをご確認ください:",
+            f"{self.livelink}"
+        ]
+        if self.extra_text:
+            # Ensure extra_text is treated as a string and prepended with a newline if it's not empty
+            message_parts.append(f"\n{str(self.extra_text).strip()}")
+
+        message_parts.extend([
+            "\n---",
+            "観測点情報:",
+            f"ステーションID: {rs.net}.{rs.stn}",
+            f"地域: {self.region_text}"
+        ])
+        
+        message = "\n".join(message_parts)
 
         self._send_message(message)
 
