@@ -27,6 +27,7 @@ from rsudp.c_googlechat import GoogleChatter # Import GoogleChatter
 from rsudp.c_discord import Discorder       # Import Discorder
 from rsudp.c_sns import SNSNotifier         # Import SNSNotifier
 from rsudp.c_line import LINENotifier       # Import LINENotifier
+from rsudp.c_bluesky import Blueskyer       # Import Blueskyer
 from rsudp.c_rsam import RSAM
 from rsudp.c_testing import Testing
 from rsudp.t_testdata import TestData
@@ -39,6 +40,7 @@ PROD = False
 CONTROLLER = False
 TELEGRAM = False
 TWITTER = False
+BLUESKY = False
 WRITER = False
 SOUND = False
 TESTING = False
@@ -62,7 +64,7 @@ def _xit(code=0):
 		TESTQUEUE.put(b'ENDTEST')
 	for thread in THREADS:
 		del thread
-	
+
 	printM('Shutdown successful.', sender=SENDER)
 	print()
 	sys.exit(code)
@@ -203,22 +205,22 @@ def run(settings, debug):
 		kiosk = settings['plot']['kiosk']
 		screencap = settings['plot']['eq_screenshots']
 		alert = settings['alert']['enabled']
-		
+
 		# Load filter values from .json file
 		filter_waveform = settings['plot']['filter_waveform']
 		filter_spectrogram = settings['plot']['filter_spectrogram']
 		filter_highpass = settings['plot']['filter_highpass']
 		filter_lowpass = settings['plot']['filter_lowpass']
 		filter_corners = settings['plot']['filter_corners']
-		
+
 		# Spectrogram range variables
 		spectrogram_freq_range = settings['plot']['spectrogram_freq_range']
 		lower_limit = settings['plot']['lower_limit']
 		upper_limit = settings['plot']['upper_limit']
-		
+
 		# Logarithmic y-axis
 		logarithmic_y_axis = settings['plot']['logarithmic_y_axis']
-		
+
 		if settings['plot']['deconvolve']:
 			if settings['plot']['units'].upper() in rs.UNITS:
 				deconv = settings['plot']['units'].upper()
@@ -471,6 +473,21 @@ def run(settings, debug):
 				printE(f"Failed to initialize LINENotifier: {e}", sender=SENDER)
 		else:
 			printW("LINE enabled but channel_access_token is 'n/a' or to_ids is empty. Skipping.", sender=SENDER)
+
+	if settings['bluesky']['enabled']:
+		global BLUESKY
+		username = settings['bluesky']['username']
+		password = settings['bluesky']['password']
+		post_images = settings['bluesky']['post_images']
+		extra_text = settings['bluesky']['extra_text']
+
+		if username != "n/a" and password != "n/a":
+			q = mk_q()
+			BLUESKY = Blueskyer(q=q, username=username, password=password,
+							   post_images=post_images, extra_text=extra_text, testing=TESTING)
+			mk_p(BLUESKY)
+		else:
+			printW("Bluesky enabled but username or password is 'n/a'. Skipping.", sender=SENDER)
 
 
 	if settings['rsam']['enabled']:

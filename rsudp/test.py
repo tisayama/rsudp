@@ -54,6 +54,8 @@ TEST = {
 	'c_sns':				['SNS message publishing      ', False],
 	'c_line':				['LINE message sending        ', False],
 	'c_lineimg':			['LINE S3 image message       ', False], # For S3 image in LINE
+	'c_bluesky':			['Bluesky text message        ', False],
+	'c_bskyimg':			['Bluesky image message       ', False],
 	'c_forward':			['forwarding                  ', False],
 	'c_rsam':				['RSAM transmission           ', False],
 	'c_custom':				['custom code execution       ', False],
@@ -138,6 +140,12 @@ def make_test_settings(settings, inet=False):
 
 	settings['telegram']['enabled'] = True
 	settings['tweets']['enabled'] = True
+
+	# Enable Bluesky for testing
+	settings['bluesky']['enabled'] = True
+	settings['bluesky']['username'] = 'test@example.com'
+	settings['bluesky']['password'] = 'test_password'
+	settings['bluesky']['post_images'] = True
 
 	# Enable Google Chat for testing
 	settings['googlechat']['enabled'] = True

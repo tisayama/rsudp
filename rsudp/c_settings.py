@@ -214,6 +214,14 @@ class Settings(dict):
         settings["line"]["aws_access_key_id"] = None # Specific to LINE's S3 usage
         settings["line"]["aws_secret_access_key"] = None # Specific to LINE's S3 usage
 
+        # bluesky section
+        settings["bluesky"] = {}
+        settings["bluesky"]["enabled"] = False
+        settings["bluesky"]["post_images"] = True
+        settings["bluesky"]["username"] = "n/a"
+        settings["bluesky"]["password"] = "n/a"
+        settings["bluesky"]["extra_text"] = ""
+
         # rsam section
         settings["rsam"] = {}
         settings["rsam"]["enabled"] = False
