@@ -63,7 +63,7 @@ class Tweeter(rs.ConsumerThread):
 
 	'''
 	def __init__(self, consumer_key, consumer_secret, access_token, access_token_secret,
-				 q=False, tweet_images=False, extra_text=False, testing=False,
+				 q=False, tweet_images=False, extra_text=False, testing=False
 				 ):
 		"""
 		Initialize the process
@@ -86,9 +86,10 @@ class Tweeter(rs.ConsumerThread):
 
 		self.auth()
 
-		self.livelink = u'live feed ➡️ https://stationview.raspberryshake.org/#?net=%s&sta=%s' % (rs.net, rs.stn)
-		self.message0 = '(#RaspberryShake station %s.%s%s) Event detected at' % (rs.net, rs.stn, self.region)
-		self.message1 = '(#RaspberryShake station %s.%s%s) Image of event detected at' % (rs.net, rs.stn, self.region)
+		# Japanese messages only
+		self.livelink = u'ライブフィード ➡️ https://stationview.raspberryshake.org/#?net=%s&sta=%s' % (rs.net, rs.stn)
+		self.message0 = u'(#RaspberryShake ステーション %s.%s%s) 強い揺れを検知しました' % (rs.net, rs.stn, self.region)
+		self.message1 = u'(#RaspberryShake ステーション %s.%s%s) 強い揺れの画像' % (rs.net, rs.stn, self.region)
 
 		printM('Starting.', self.sender)
 
@@ -213,7 +214,7 @@ class Tweeter(rs.ConsumerThread):
 					printM('Could not find image: %s' % (imgpath), sender=self.sender)
 			else:
 				TEST['c_tweetimg'][1] = True
-		
+
 		self.last_message = message
 
 	def run(self):

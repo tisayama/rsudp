@@ -28,7 +28,7 @@ class Blueskyer(rs.ConsumerThread):
 	:param queue.Queue q: queue of data and messages sent by :class:`rsudp.c_consumer.Consumer`
 	'''
 	def __init__(self, username, password,
-				 q=False, post_images=False, extra_text=False, testing=False,
+				 q=False, post_images=False, extra_text=False, testing=False
 				 ):
 		"""
 		Initialize the process
@@ -49,9 +49,10 @@ class Blueskyer(rs.ConsumerThread):
 
 		self.auth()
 
-		self.livelink = u'live feed ➡️ https://stationview.raspberryshake.org/#?net=%s&sta=%s' % (rs.net, rs.stn)
-		self.message0 = '(#RaspberryShake station %s.%s%s) Event detected at' % (rs.net, rs.stn, self.region)
-		self.message1 = '(#RaspberryShake station %s.%s%s) Image of event detected at' % (rs.net, rs.stn, self.region)
+		# Japanese messages only
+		self.livelink = u'ライブフィード ➡️ https://stationview.raspberryshake.org/#?net=%s&sta=%s' % (rs.net, rs.stn)
+		self.message0 = u'(#RaspberryShake ステーション %s.%s%s) 強い揺れを検知しました' % (rs.net, rs.stn, self.region)
+		self.message1 = u'(#RaspberryShake ステーション %s.%s%s) 強い揺れの画像' % (rs.net, rs.stn, self.region)
 
 		printM('Starting.', self.sender)
 
@@ -139,10 +140,10 @@ class Blueskyer(rs.ConsumerThread):
 						printM('Uploading image to Bluesky %s' % (imgpath), self.sender)
 						with open(imgpath, 'rb') as f:
 							img_data = f.read()
-						
+
 						# Upload the image to Bluesky
 						upload_response = self.client.upload_blob(img_data)
-						
+
 						# Create a post with the image
 						response = self.client.send_post(
 							text=message,
@@ -159,10 +160,10 @@ class Blueskyer(rs.ConsumerThread):
 							printM('Uploading image to Bluesky (2nd try) %s' % (imgpath), self.sender)
 							with open(imgpath, 'rb') as f:
 								img_data = f.read()
-							
+
 							# Upload the image to Bluesky
 							upload_response = self.client.upload_blob(img_data)
-							
+
 							# Create a post with the image
 							response = self.client.send_post(
 								text=message,
@@ -179,7 +180,7 @@ class Blueskyer(rs.ConsumerThread):
 					printM('Could not find image: %s' % (imgpath), sender=self.sender)
 			else:
 				TEST['c_bskyimg'][1] = True
-		
+
 		self.last_message = message
 
 	def run(self):
