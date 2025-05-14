@@ -31,3 +31,4 @@ dependencies:
     - line-bot-sdk # Add LINE Bot SDK
     - rsudp
     - pyqt5==5.15.11
+    - atproto

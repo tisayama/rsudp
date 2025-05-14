@@ -18,6 +18,7 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     include_package_data=True,
     install_requires=['obspy',
+                      'atproto',
                       'numpy>=2.0.0,<3',
                       'matplotlib>3.2,<4',
                       'pydub',
