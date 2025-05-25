@@ -11,64 +11,76 @@ import (
 
 // Config represents the complete application configuration
 type Config struct {
-	Settings     Settings     `json:"settings" yaml:"settings"`
-	Alert        Alert        `json:"alert" yaml:"alert"`
-	Plot         Plot         `json:"plot" yaml:"plot"`
-	Write        Write        `json:"write" yaml:"write"`
-	PrintData    PrintData    `json:"printdata" yaml:"printdata"`
-	Telegram     Telegram     `json:"telegram" yaml:"telegram"`
-	Twitter      Twitter      `json:"twitter" yaml:"twitter"`
-	Discord      Discord      `json:"discord" yaml:"discord"`
-	Bluesky      Bluesky      `json:"bluesky" yaml:"bluesky"`
-	GoogleChat   GoogleChat   `json:"googlechat" yaml:"googlechat"`
-	LINE         LINE         `json:"line" yaml:"line"`
-	SNS          SNS          `json:"sns" yaml:"sns"`
-	AlertSound   AlertSound   `json:"alertsound" yaml:"alertsound"`
-	Forward      Forward      `json:"forward" yaml:"forward"`
-	RSAM         RSAM         `json:"rsam" yaml:"rsam"`
-	Custom       Custom       `json:"custom" yaml:"custom"`
+	Settings   Settings   `json:"settings" yaml:"settings"`
+	Alert      Alert      `json:"alert" yaml:"alert"`
+	Plot       Plot       `json:"plot" yaml:"plot"`
+	Write      Write      `json:"write" yaml:"write"`
+	PrintData  PrintData  `json:"printdata" yaml:"printdata"`
+	Telegram   Telegram   `json:"telegram" yaml:"telegram"`
+	Twitter    Twitter    `json:"twitter" yaml:"twitter"`
+	Discord    Discord    `json:"discord" yaml:"discord"`
+	Bluesky    Bluesky    `json:"bluesky" yaml:"bluesky"`
+	GoogleChat GoogleChat `json:"googlechat" yaml:"googlechat"`
+	LINE       LINE       `json:"line" yaml:"line"`
+	SNS        SNS        `json:"sns" yaml:"sns"`
+	AlertSound AlertSound `json:"alertsound" yaml:"alertsound"`
+	Forward    Forward    `json:"forward" yaml:"forward"`
+	RSAM       RSAM       `json:"rsam" yaml:"rsam"`
+	Custom     Custom     `json:"custom" yaml:"custom"`
 }
 
 // Settings contains general application settings
 type Settings struct {
-	Port        int    `json:"port" yaml:"port"`
-	Station     string `json:"station" yaml:"station"`
-	Network     string `json:"network" yaml:"network"`
-	Location    string `json:"location" yaml:"location"`
-	OutDir      string `json:"output_dir" yaml:"output_dir"`
-	DataDir     string `json:"data_dir" yaml:"data_dir"`
+	Port          int    `json:"port" yaml:"port"`
+	Station       string `json:"station" yaml:"station"`
+	Network       string `json:"network" yaml:"network"`
+	Location      string `json:"location" yaml:"location"`
+	OutDir        string `json:"output_dir" yaml:"output_dir"`
+	DataDir       string `json:"data_dir" yaml:"data_dir"`
 	ScreenshotDir string `json:"screenshot_dir" yaml:"screenshot_dir"`
-	LogDir      string `json:"log_dir" yaml:"log_dir"`
-	Debug       bool   `json:"debug" yaml:"debug"`
+	LogDir        string `json:"log_dir" yaml:"log_dir"`
+	Debug         bool   `json:"debug" yaml:"debug"`
 }
 
 // Alert contains STA/LTA earthquake detection settings
 type Alert struct {
-	Enabled   bool      `json:"enabled" yaml:"enabled"`
-	Channel   string    `json:"channel" yaml:"channel"`
-	STA       float64   `json:"sta" yaml:"sta"`           // Short Term Average window (seconds)
-	LTA       float64   `json:"lta" yaml:"lta"`           // Long Term Average window (seconds)
-	Threshold float64   `json:"threshold" yaml:"threshold"` // STA/LTA trigger threshold
-	Reset     float64   `json:"reset" yaml:"reset"`       // Reset threshold
-	Highpass  float64   `json:"highpass" yaml:"highpass"` // Highpass filter (Hz)
-	Lowpass   float64   `json:"lowpass" yaml:"lowpass"`   // Lowpass filter (Hz)
-	Duration  float64   `json:"duration" yaml:"duration"` // Duration requirement (seconds)
-	Deconv    string    `json:"deconv" yaml:"deconv"`     // Deconvolution type
-	Units     string    `json:"units" yaml:"units"`       // Display units
+	Enabled     bool    `json:"enabled" yaml:"enabled"`
+	Channel     string  `json:"channel" yaml:"channel"`
+	STA         float64 `json:"sta" yaml:"sta"`                   // Short Term Average window (seconds)
+	LTA         float64 `json:"lta" yaml:"lta"`                   // Long Term Average window (seconds)
+	Threshold   float64 `json:"threshold" yaml:"threshold"`       // STA/LTA trigger threshold
+	Reset       float64 `json:"reset" yaml:"reset"`               // Reset threshold
+	Highpass    float64 `json:"highpass" yaml:"highpass"`         // Highpass filter (Hz)
+	Lowpass     float64 `json:"lowpass" yaml:"lowpass"`           // Lowpass filter (Hz)
+	Duration    float64 `json:"duration" yaml:"duration"`         // Duration requirement (seconds)
+	LogInterval float64 `json:"log_interval" yaml:"log_interval"` // STA/LTA log interval (seconds), 0 to disable
+	Deconv      string  `json:"deconv" yaml:"deconv"`             // Deconvolution type
+	Units       string  `json:"units" yaml:"units"`               // Display units
 }
 
 // Plot contains real-time plotting settings
 type Plot struct {
-	Enabled         bool     `json:"enabled" yaml:"enabled"`
-	Channels        []string `json:"channels" yaml:"channels"`
-	Duration        int      `json:"duration" yaml:"duration"`     // Plot duration (seconds)
-	Spectrogram     bool     `json:"spectrogram" yaml:"spectrogram"`
-	Fullscreen      bool     `json:"fullscreen" yaml:"fullscreen"`
-	Kiosk           bool     `json:"kiosk" yaml:"kiosk"`
-	EqScreenshots   bool     `json:"eq_screenshots" yaml:"eq_screenshots"`
-	Deconv          bool     `json:"deconv" yaml:"deconv"`
-	Units           string   `json:"units" yaml:"units"`
-	RefreshInterval int      `json:"refresh_interval" yaml:"refresh_interval"` // Refresh interval (ms)
+	Enabled              bool     `json:"enabled" yaml:"enabled"`
+	Channels             []string `json:"channels" yaml:"channels"`
+	Duration             int      `json:"duration" yaml:"duration"` // Plot duration (seconds)
+	Spectrogram          bool     `json:"spectrogram" yaml:"spectrogram"`
+	Fullscreen           bool     `json:"fullscreen" yaml:"fullscreen"`
+	Kiosk                bool     `json:"kiosk" yaml:"kiosk"`
+	EqScreenshots        bool     `json:"eq_screenshots" yaml:"eq_screenshots"`
+	Deconv               bool     `json:"deconv" yaml:"deconv"`
+	Units                string   `json:"units" yaml:"units"`
+	RefreshInterval      int      `json:"refresh_interval" yaml:"refresh_interval"` // Refresh interval (ms)
+	Host                 string   `json:"host" yaml:"host"`                         // Web server host
+	Port                 int      `json:"port" yaml:"port"`                         // Web server port
+	FilterWaveform       bool     `json:"filter_waveform" yaml:"filter_waveform"`
+	FilterSpectrogram    bool     `json:"filter_spectrogram" yaml:"filter_spectrogram"`
+	FilterHighpass       float64  `json:"filter_highpass" yaml:"filter_highpass"`
+	FilterLowpass        float64  `json:"filter_lowpass" yaml:"filter_lowpass"`
+	FilterCorners        int      `json:"filter_corners" yaml:"filter_corners"`
+	SpectrogramFreqRange bool     `json:"spectrogram_freq_range" yaml:"spectrogram_freq_range"`
+	UpperLimit           float64  `json:"upper_limit" yaml:"upper_limit"`
+	LowerLimit           float64  `json:"lower_limit" yaml:"lower_limit"`
+	LogarithmicYAxis     bool     `json:"logarithmic_y_axis" yaml:"logarithmic_y_axis"`
 }
 
 // Write contains data writing settings
@@ -93,21 +105,21 @@ type Telegram struct {
 
 // Twitter contains Twitter notification settings
 type Twitter struct {
-	Enabled         bool   `json:"enabled" yaml:"enabled"`
-	ConsumerKey     string `json:"consumer_key" yaml:"consumer_key"`
-	ConsumerSecret  string `json:"consumer_secret" yaml:"consumer_secret"`
-	AccessToken     string `json:"access_token" yaml:"access_token"`
-	AccessSecret    string `json:"access_secret" yaml:"access_secret"`
-	TweetImages     bool   `json:"tweet_images" yaml:"tweet_images"`
-	ExtraText       string `json:"extra_text" yaml:"extra_text"`
+	Enabled        bool   `json:"enabled" yaml:"enabled"`
+	ConsumerKey    string `json:"consumer_key" yaml:"consumer_key"`
+	ConsumerSecret string `json:"consumer_secret" yaml:"consumer_secret"`
+	AccessToken    string `json:"access_token" yaml:"access_token"`
+	AccessSecret   string `json:"access_secret" yaml:"access_secret"`
+	TweetImages    bool   `json:"tweet_images" yaml:"tweet_images"`
+	ExtraText      string `json:"extra_text" yaml:"extra_text"`
 }
 
 // Discord contains Discord notification settings
 type Discord struct {
-	Enabled     bool   `json:"enabled" yaml:"enabled"`
-	WebhookURL  string `json:"webhook_url" yaml:"webhook_url"`
-	UseEmbed    bool   `json:"use_embed" yaml:"use_embed"`
-	SendImages  bool   `json:"send_images" yaml:"send_images"`
+	Enabled    bool   `json:"enabled" yaml:"enabled"`
+	WebhookURL string `json:"webhook_url" yaml:"webhook_url"`
+	UseEmbed   bool   `json:"use_embed" yaml:"use_embed"`
+	SendImages bool   `json:"send_images" yaml:"send_images"`
 }
 
 // Bluesky contains Bluesky notification settings
@@ -120,23 +132,23 @@ type Bluesky struct {
 
 // GoogleChat contains Google Chat notification settings
 type GoogleChat struct {
-	Enabled                    bool   `json:"enabled" yaml:"enabled"`
-	WebhookURL                string `json:"webhook_url" yaml:"webhook_url"`
-	SendImages                bool   `json:"send_images" yaml:"send_images"`
-	S3BucketName              string `json:"s3_bucket_name" yaml:"s3_bucket_name"`
-	S3AWSRegion               string `json:"s3_aws_region" yaml:"s3_aws_region"`
-	S3UploadTimeoutSeconds    int    `json:"s3_upload_timeout_seconds" yaml:"s3_upload_timeout_seconds"`
+	Enabled                bool   `json:"enabled" yaml:"enabled"`
+	WebhookURL             string `json:"webhook_url" yaml:"webhook_url"`
+	SendImages             bool   `json:"send_images" yaml:"send_images"`
+	S3BucketName           string `json:"s3_bucket_name" yaml:"s3_bucket_name"`
+	S3AWSRegion            string `json:"s3_aws_region" yaml:"s3_aws_region"`
+	S3UploadTimeoutSeconds int    `json:"s3_upload_timeout_seconds" yaml:"s3_upload_timeout_seconds"`
 }
 
 // LINE contains LINE notification settings
 type LINE struct {
-	Enabled                   bool   `json:"enabled" yaml:"enabled"`
-	ChannelAccessToken        string `json:"channel_access_token" yaml:"channel_access_token"`
-	ToIDs                     string `json:"to_ids" yaml:"to_ids"`
-	SendImages                bool   `json:"send_images" yaml:"send_images"`
-	S3BucketName              string `json:"s3_bucket_name" yaml:"s3_bucket_name"`
-	S3AWSRegion               string `json:"s3_aws_region" yaml:"s3_aws_region"`
-	S3UploadTimeoutSeconds    int    `json:"s3_upload_timeout_seconds" yaml:"s3_upload_timeout_seconds"`
+	Enabled                bool   `json:"enabled" yaml:"enabled"`
+	ChannelAccessToken     string `json:"channel_access_token" yaml:"channel_access_token"`
+	ToIDs                  string `json:"to_ids" yaml:"to_ids"`
+	SendImages             bool   `json:"send_images" yaml:"send_images"`
+	S3BucketName           string `json:"s3_bucket_name" yaml:"s3_bucket_name"`
+	S3AWSRegion            string `json:"s3_aws_region" yaml:"s3_aws_region"`
+	S3UploadTimeoutSeconds int    `json:"s3_upload_timeout_seconds" yaml:"s3_upload_timeout_seconds"`
 }
 
 // SNS contains AWS SNS notification settings
@@ -164,21 +176,21 @@ type Forward struct {
 
 // RSAM contains RSAM (Real-time Seismic Amplitude Measurement) settings
 type RSAM struct {
-	Enabled  bool    `json:"enabled" yaml:"enabled"`
-	Quiet    bool    `json:"quiet" yaml:"quiet"`
-	Interval int     `json:"interval" yaml:"interval"` // Interval in seconds
-	Channel  string  `json:"channel" yaml:"channel"`
-	Address  string  `json:"address" yaml:"address"`
-	Port     int     `json:"port" yaml:"port"`
-	Deconv   string  `json:"deconv" yaml:"deconv"`
+	Enabled  bool   `json:"enabled" yaml:"enabled"`
+	Quiet    bool   `json:"quiet" yaml:"quiet"`
+	Interval int    `json:"interval" yaml:"interval"` // Interval in seconds
+	Channel  string `json:"channel" yaml:"channel"`
+	Address  string `json:"address" yaml:"address"`
+	Port     int    `json:"port" yaml:"port"`
+	Deconv   string `json:"deconv" yaml:"deconv"`
 }
 
 // Custom contains custom module settings
 type Custom struct {
-	Enabled      bool   `json:"enabled" yaml:"enabled"`
-	CodePath     string `json:"codepath" yaml:"codepath"`
-	ExecCommand  string `json:"execcommand" yaml:"execcommand"`
-	Args         string `json:"args" yaml:"args"`
+	Enabled     bool   `json:"enabled" yaml:"enabled"`
+	CodePath    string `json:"codepath" yaml:"codepath"`
+	ExecCommand string `json:"execcommand" yaml:"execcommand"`
+	Args        string `json:"args" yaml:"args"`
 }
 
 // LoadConfig loads configuration from a JSON file
@@ -187,26 +199,26 @@ func LoadConfig(filename string) (*Config, error) {
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		return nil, fmt.Errorf("config file does not exist: %s", filename)
 	}
-	
+
 	// Read file
 	data, err := ioutil.ReadFile(filename)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %v", err)
 	}
-	
+
 	// Parse JSON
 	var config Config
 	if err := json.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse config JSON: %v", err)
 	}
-	
+
 	// Validate and set defaults
 	if err := config.Validate(); err != nil {
 		return nil, fmt.Errorf("config validation failed: %v", err)
 	}
-	
+
 	config.SetDefaults()
-	
+
 	return &config, nil
 }
 
@@ -217,18 +229,18 @@ func (c *Config) SaveConfig(filename string) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %v", err)
 	}
-	
+
 	// Marshal to JSON with indentation
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal config to JSON: %v", err)
 	}
-	
+
 	// Write to file
 	if err := ioutil.WriteFile(filename, data, 0644); err != nil {
 		return fmt.Errorf("failed to write config file: %v", err)
 	}
-	
+
 	return nil
 }
 
@@ -238,12 +250,12 @@ func (c *Config) Validate() error {
 	if c.Settings.Port < 1 || c.Settings.Port > 65535 {
 		return fmt.Errorf("invalid port: %d", c.Settings.Port)
 	}
-	
+
 	// Validate station name
 	if c.Settings.Station == "" {
 		return fmt.Errorf("station name cannot be empty")
 	}
-	
+
 	// Validate alert settings
 	if c.Alert.Enabled {
 		if c.Alert.STA <= 0 {
@@ -262,14 +274,14 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("alert reset threshold must be positive")
 		}
 	}
-	
+
 	// Validate plot settings
 	if c.Plot.Enabled {
 		if c.Plot.Duration <= 0 {
 			return fmt.Errorf("plot duration must be positive")
 		}
 	}
-	
+
 	return nil
 }
 
@@ -297,7 +309,7 @@ func (c *Config) SetDefaults() {
 	if c.Settings.LogDir == "" {
 		c.Settings.LogDir = "./logs"
 	}
-	
+
 	// Alert defaults
 	if c.Alert.STA == 0 {
 		c.Alert.STA = 5.0
@@ -314,7 +326,7 @@ func (c *Config) SetDefaults() {
 	if c.Alert.Channel == "" {
 		c.Alert.Channel = "HZ"
 	}
-	
+
 	// Plot defaults
 	if c.Plot.Duration == 0 {
 		c.Plot.Duration = 30
@@ -325,7 +337,7 @@ func (c *Config) SetDefaults() {
 	if c.Plot.RefreshInterval == 0 {
 		c.Plot.RefreshInterval = 1000 // 1 second
 	}
-	
+
 	// Write defaults
 	if len(c.Write.Channels) == 0 {
 		c.Write.Channels = []string{"all"}
@@ -363,16 +375,27 @@ func DefaultConfig() *Config {
 			Units:     "CHAN",
 		},
 		Plot: Plot{
-			Enabled:         false,
-			Channels:        []string{"all"},
-			Duration:        30,
-			Spectrogram:     true,
-			Fullscreen:      false,
-			Kiosk:           false,
-			EqScreenshots:   false,
-			Deconv:          false,
-			Units:           "CHAN",
-			RefreshInterval: 1000,
+			Enabled:              false,
+			Channels:             []string{"all"},
+			Duration:             30,
+			Spectrogram:          true,
+			Fullscreen:           false,
+			Kiosk:                false,
+			EqScreenshots:        false,
+			Deconv:               false,
+			Units:                "CHAN",
+			RefreshInterval:      1000,
+			Host:                 "localhost",
+			Port:                 8080,
+			FilterWaveform:       true,
+			FilterSpectrogram:    false,
+			FilterHighpass:       0.7,
+			FilterLowpass:        9.0,
+			FilterCorners:        4,
+			SpectrogramFreqRange: true,
+			UpperLimit:           9.0,
+			LowerLimit:           0.7,
+			LogarithmicYAxis:     true,
 		},
 		Write: Write{
 			Enabled:  false,
@@ -383,7 +406,7 @@ func DefaultConfig() *Config {
 			Enabled: false,
 		},
 	}
-	
+
 	return config
 }
 

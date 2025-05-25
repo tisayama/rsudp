@@ -117,7 +117,7 @@ docker-build:
 # Run Docker container
 docker-run:
 	@echo "Running Docker container..."
-	docker run --rm -p 8888:8888/udp -p 8080:8080 gorsudp:$(VERSION)
+	docker run --rm --init -p 0.0.0.0:8888:8888/udp -p 0.0.0.0:8080:8080 gorsudp:$(VERSION)
 
 # Show help
 help:

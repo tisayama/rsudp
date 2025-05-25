@@ -1,0 +1,59 @@
+[Unit]
+Description=GoRSUDP - Go-based Raspberry Shake UDP Data Processor
+Documentation=https://github.com/tisayama/gorsudp
+After=network.target network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=gorsudp
+Group=gorsudp
+
+# Binary and configuration
+ExecStart=/usr/local/bin/gorsudp --config /etc/gorsudp/config.json
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Working directory and environment
+WorkingDirectory=/var/lib/gorsudp
+Environment=GORSUDP_CONFIG=/etc/gorsudp/config.json
+Environment=GORSUDP_DATA_DIR=/var/lib/gorsudp/data
+Environment=GORSUDP_LOG_DIR=/var/log/gorsudp
+Environment=GORSUDP_SCREENSHOT_DIR=/var/lib/gorsudp/screenshots
+
+# Restart configuration
+Restart=always
+RestartSec=5
+TimeoutStartSec=30
+TimeoutStopSec=30
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+MemoryLimit=512M
+CPUQuota=100%
+
+# Security settings
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectHome=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/gorsudp /var/log/gorsudp
+
+# Capability restrictions
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=gorsudp
+
+# Health check
+ExecStartPre=/usr/local/bin/gorsudp --health-check
+HealthCheckIntervalSec=30
+
+[Install]
+WantedBy=multi-user.target

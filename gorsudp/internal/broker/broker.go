@@ -107,25 +107,25 @@ type ConsumerInfo struct {
 
 // EventMetrics tracks broker performance
 type EventMetrics struct {
-	TotalEvents     int64
-	EventsByType    map[EventType]int64
-	DroppedEvents   int64
-	ConsumerErrors  int64
-	LastEventTime   time.Time
-	mutex           sync.RWMutex
+	TotalEvents    int64
+	EventsByType   map[EventType]int64
+	DroppedEvents  int64
+	ConsumerErrors int64
+	LastEventTime  time.Time
+	mutex          sync.RWMutex
 }
 
 // NewMessageBroker creates a new message broker with the specified queue size
 func NewMessageBroker(queueSize int) *MessageBroker {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	return &MessageBroker{
-		consumers:   make(map[string]ConsumerInfo),
-		eventQueue:  make(chan Event, queueSize),
-		queueSize:   queueSize,
-		shutdown:    make(chan struct{}),
-		ctx:         ctx,
-		cancel:      cancel,
+		consumers:  make(map[string]ConsumerInfo),
+		eventQueue: make(chan Event, queueSize),
+		queueSize:  queueSize,
+		shutdown:   make(chan struct{}),
+		ctx:        ctx,
+		cancel:     cancel,
 		eventMetrics: EventMetrics{
 			EventsByType: make(map[EventType]int64),
 		},
@@ -136,15 +136,15 @@ func NewMessageBroker(queueSize int) *MessageBroker {
 func (mb *MessageBroker) Start() error {
 	mb.mutex.Lock()
 	defer mb.mutex.Unlock()
-	
+
 	if mb.running {
 		return fmt.Errorf("broker is already running")
 	}
-	
+
 	mb.running = true
 	mb.wg.Add(1)
 	go mb.eventLoop()
-	
+
 	log.Printf("Message broker started with queue size %d", mb.queueSize)
 	return nil
 }
@@ -158,14 +158,28 @@ func (mb *MessageBroker) Stop() error {
 	}
 	mb.running = false
 	mb.mutex.Unlock()
-	
+
 	// Signal shutdown and cancel context
 	mb.cancel()
 	close(mb.shutdown)
-	
-	// Wait for event loop to finish
-	mb.wg.Wait()
-	
+
+	// Wait for event loop to finish with timeout
+	done := make(chan struct{})
+	go func() {
+		mb.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Normal shutdown completed
+	case <-time.After(10 * time.Second):
+		log.Println("Warning: Broker shutdown timeout exceeded, some goroutines may not have finished")
+	}
+
+	// Close the event queue channel
+	close(mb.eventQueue)
+
 	// Close all consumer channels
 	mb.mutex.Lock()
 	for id, info := range mb.consumers {
@@ -173,7 +187,7 @@ func (mb *MessageBroker) Stop() error {
 		log.Printf("Closed channel for consumer %s", id)
 	}
 	mb.mutex.Unlock()
-	
+
 	log.Println("Message broker stopped")
 	return nil
 }
@@ -182,25 +196,25 @@ func (mb *MessageBroker) Stop() error {
 func (mb *MessageBroker) RegisterConsumer(consumer Consumer) error {
 	mb.mutex.Lock()
 	defer mb.mutex.Unlock()
-	
+
 	id := consumer.GetID()
 	if _, exists := mb.consumers[id]; exists {
 		return fmt.Errorf("consumer %s already registered", id)
 	}
-	
+
 	consumerChan := make(chan Event, 100) // Buffer for each consumer
-	
+
 	mb.consumers[id] = ConsumerInfo{
 		Consumer: consumer,
 		Channel:  consumerChan,
 		Filters:  consumer.GetChannelFilters(),
 		Active:   true,
 	}
-	
+
 	// Start consumer goroutine
 	mb.wg.Add(1)
 	go mb.consumerLoop(id, consumerChan, consumer)
-	
+
 	log.Printf("Registered consumer: %s", id)
 	return nil
 }
@@ -208,23 +222,33 @@ func (mb *MessageBroker) RegisterConsumer(consumer Consumer) error {
 // UnregisterConsumer removes a consumer
 func (mb *MessageBroker) UnregisterConsumer(consumerID string) error {
 	mb.mutex.Lock()
-	defer mb.mutex.Unlock()
-	
 	info, exists := mb.consumers[consumerID]
 	if !exists {
+		mb.mutex.Unlock()
 		return fmt.Errorf("consumer %s not found", consumerID)
 	}
-	
+
 	info.Active = false
-	close(info.Channel)
 	delete(mb.consumers, consumerID)
-	
+	mb.mutex.Unlock()
+
+	// Close channel after removing from map to avoid race conditions
+	close(info.Channel)
+
 	log.Printf("Unregistered consumer: %s", consumerID)
 	return nil
 }
 
 // PublishEvent sends an event to all registered consumers
 func (mb *MessageBroker) PublishEvent(event Event) error {
+	mb.mutex.RLock()
+	running := mb.running
+	mb.mutex.RUnlock()
+
+	if !running {
+		return fmt.Errorf("broker is not running")
+	}
+
 	select {
 	case mb.eventQueue <- event:
 		mb.updateMetrics(event)
@@ -307,7 +331,7 @@ func (mb *MessageBroker) PublishTerm(reason string) error {
 // eventLoop is the main event processing loop
 func (mb *MessageBroker) eventLoop() {
 	defer mb.wg.Done()
-	
+
 	for {
 		select {
 		case event := <-mb.eventQueue:
@@ -323,12 +347,12 @@ func (mb *MessageBroker) eventLoop() {
 func (mb *MessageBroker) distributeEvent(event Event) {
 	mb.mutex.RLock()
 	defer mb.mutex.RUnlock()
-	
+
 	for id, info := range mb.consumers {
 		if !info.Active {
 			continue
 		}
-		
+
 		// Check if consumer should receive this event
 		if mb.shouldReceiveEvent(info, event) {
 			select {
@@ -348,12 +372,12 @@ func (mb *MessageBroker) shouldReceiveEvent(info ConsumerInfo, event Event) bool
 	if event.Type != EventData {
 		return true
 	}
-	
+
 	// If no filters, accept all
 	if len(info.Filters) == 0 {
 		return true
 	}
-	
+
 	// Check channel filters for data events
 	if dataEvent, ok := event.Data.(DataEvent); ok {
 		channel := dataEvent.Packet.Channel
@@ -363,14 +387,14 @@ func (mb *MessageBroker) shouldReceiveEvent(info ConsumerInfo, event Event) bool
 			}
 		}
 	}
-	
+
 	return false
 }
 
 // consumerLoop handles events for a specific consumer
 func (mb *MessageBroker) consumerLoop(consumerID string, eventChan <-chan Event, consumer Consumer) {
 	defer mb.wg.Done()
-	
+
 	for event := range eventChan {
 		if err := consumer.ProcessEvent(event); err != nil {
 			log.Printf("Consumer %s error processing event: %v", consumerID, err)
@@ -379,7 +403,7 @@ func (mb *MessageBroker) consumerLoop(consumerID string, eventChan <-chan Event,
 			mb.mutex.Unlock()
 		}
 	}
-	
+
 	log.Printf("Consumer loop ended for %s", consumerID)
 }
 
@@ -387,7 +411,7 @@ func (mb *MessageBroker) consumerLoop(consumerID string, eventChan <-chan Event,
 func (mb *MessageBroker) updateMetrics(event Event) {
 	mb.mutex.Lock()
 	defer mb.mutex.Unlock()
-	
+
 	mb.eventMetrics.TotalEvents++
 	mb.eventMetrics.EventsByType[event.Type]++
 	mb.eventMetrics.LastEventTime = event.Timestamp
@@ -397,20 +421,20 @@ func (mb *MessageBroker) updateMetrics(event Event) {
 func (mb *MessageBroker) GetMetrics() EventMetrics {
 	mb.mutex.RLock()
 	defer mb.mutex.RUnlock()
-	
+
 	// Return copy to avoid race conditions
 	metrics := EventMetrics{
-		TotalEvents:   mb.eventMetrics.TotalEvents,
-		DroppedEvents: mb.eventMetrics.DroppedEvents,
+		TotalEvents:    mb.eventMetrics.TotalEvents,
+		DroppedEvents:  mb.eventMetrics.DroppedEvents,
 		ConsumerErrors: mb.eventMetrics.ConsumerErrors,
-		LastEventTime: mb.eventMetrics.LastEventTime,
-		EventsByType:  make(map[EventType]int64),
+		LastEventTime:  mb.eventMetrics.LastEventTime,
+		EventsByType:   make(map[EventType]int64),
 	}
-	
+
 	for k, v := range mb.eventMetrics.EventsByType {
 		metrics.EventsByType[k] = v
 	}
-	
+
 	return metrics
 }
 
@@ -418,7 +442,7 @@ func (mb *MessageBroker) GetMetrics() EventMetrics {
 func (mb *MessageBroker) GetConsumerInfo() map[string]ConsumerInfo {
 	mb.mutex.RLock()
 	defer mb.mutex.RUnlock()
-	
+
 	info := make(map[string]ConsumerInfo)
 	for k, v := range mb.consumers {
 		info[k] = ConsumerInfo{
@@ -428,6 +452,6 @@ func (mb *MessageBroker) GetConsumerInfo() map[string]ConsumerInfo {
 			Active:   v.Active,
 		}
 	}
-	
+
 	return info
 }

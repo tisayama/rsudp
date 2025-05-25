@@ -98,6 +98,50 @@ Configure multiple notification channels:
 }
 ```
 
+## Production Deployment
+
+### Docker
+
+```bash
+# Build and run with Docker Compose
+cd deploy/docker
+docker-compose up -d
+
+# Or build manually
+docker build -t gorsudp .
+docker run -d -p 8080:8080 -p 8081:8081 -v ~/.gorsudp:/app/config gorsudp
+```
+
+### systemd Service
+
+```bash
+# Install as system service (requires root)
+sudo ./deploy/systemd/install-service.sh
+
+# Start service
+sudo systemctl start gorsudp
+sudo systemctl enable gorsudp
+
+# Check status
+sudo systemctl status gorsudp
+```
+
+### Health Monitoring
+
+Built-in health monitoring available at `http://localhost:8081/health`:
+
+```json
+{
+  "status": "healthy",
+  "timestamp": "2025-05-25T07:43:57Z",
+  "components": {
+    "udp_port": {"status": "healthy", "message": "UDP port listening"},
+    "broker": {"status": "healthy", "message": "Message broker operational"},
+    "consumers": {"status": "healthy", "message": "All consumers running"}
+  }
+}
+```
+
 ## Development
 
 ### Prerequisites
@@ -212,7 +256,8 @@ sudo tcpdump -i any udp port 8888
 
 1. Use production build (not debug mode)
 2. Adjust buffer sizes in configuration
-3. Monitor with built-in metrics endpoint: `http://localhost:8080/metrics`
+3. Monitor with built-in health endpoint: `http://localhost:8081/health`
+4. Check logs for packet loss or consumer lag
 
 ## Contributing
 

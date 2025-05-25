@@ -1,0 +1,135 @@
+version: '3.8'
+
+services:
+  gorsudp:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    container_name: gorsudp
+    restart: unless-stopped
+    
+    # Network configuration
+    ports:
+      - "8888:8888/udp"  # UDP data input
+      - "8080:8080/tcp"  # Web interface
+    
+    # Volume mounts
+    volumes:
+      - ./config:/app/config:ro
+      - gorsudp-data:/app/data
+      - gorsudp-logs:/app/logs
+      - gorsudp-screenshots:/app/screenshots
+    
+    # Environment variables
+    environment:
+      - TZ=UTC
+      - GORSUDP_CONFIG=/app/config/config.json
+      - GORSUDP_DATA_DIR=/app/data
+      - GORSUDP_LOG_DIR=/app/logs
+      - GORSUDP_SCREENSHOT_DIR=/app/screenshots
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '1.0'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "gorsudp", "--health-check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Test data generator for development
+  gorsudp-testgen:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    container_name: gorsudp-testgen
+    restart: "no"
+    profiles:
+      - testing
+    
+    environment:
+      - GORSUDP_TARGET_HOST=gorsudp
+      - GORSUDP_TARGET_PORT=8888
+    
+    command: ["gorsudp-testgen", "--host", "gorsudp", "--port", "8888", "--duration", "5m"]
+    
+    depends_on:
+      gorsudp:
+        condition: service_healthy
+
+  # Optional: Monitoring with Prometheus
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: gorsudp-prometheus
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    
+    ports:
+      - "9090:9090"
+    
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+
+  # Optional: Grafana for visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: gorsudp-grafana
+    restart: unless-stopped
+    profiles:
+      - monitoring
+    
+    ports:
+      - "3000:3000"
+    
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    
+    depends_on:
+      - prometheus
+
+volumes:
+  gorsudp-data:
+    driver: local
+  gorsudp-logs:
+    driver: local
+  gorsudp-screenshots:
+    driver: local
+  prometheus-data:
+    driver: local
+  grafana-data:
+    driver: local
+
+networks:
+  default:
+    name: gorsudp-network

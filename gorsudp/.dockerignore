@@ -1,0 +1,66 @@
+# Build artifacts
+gorsudp
+gorsudp-testgen
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test files
+*.test
+coverage.out
+profile.out
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+*~
+
+# IDE files
+.vscode/
+.idea/
+*.iml
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Development files
+.env
+.env.local
+.env.*.local
+
+# Git
+.git/
+.gitignore
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Documentation (except README)
+*.md
+!README.md
+docs/
+
+# Local development
+data/
+logs/
+screenshots/
+output/
+testdata/
+*.log
+
+# Dependencies that should be downloaded fresh
+vendor/
+
+# Local configuration
+config.json
+.gorsudp/

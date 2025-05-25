@@ -1,6 +1,6 @@
 {
   "settings": {
-    "port": 8888,
+    "port": 8899,
     "station": "Z0000",
     "network": "AM",
     "location": "00",
@@ -20,11 +20,12 @@
     "highpass": 0.8,
     "lowpass": 9,
     "duration": 0,
+    "log_interval": 30,
     "deconv": "CHAN",
     "units": "CHAN"
   },
   "plot": {
-    "enabled": false,
+    "enabled": true,
     "channels": [
       "all"
     ],
@@ -32,10 +33,21 @@
     "spectrogram": true,
     "fullscreen": false,
     "kiosk": false,
-    "eq_screenshots": false,
+    "eq_screenshots": true,
     "deconv": false,
     "units": "CHAN",
-    "refresh_interval": 1000
+    "refresh_interval": 1000,
+    "host": "localhost",
+    "port": 8082,
+    "filter_waveform": true,
+    "filter_spectrogram": false,
+    "filter_highpass": 0.7,
+    "filter_lowpass": 9.0,
+    "filter_corners": 4,
+    "spectrogram_freq_range": true,
+    "upper_limit": 9.0,
+    "lower_limit": 0.7,
+    "logarithmic_y_axis": true
   },
   "write": {
     "enabled": false,
