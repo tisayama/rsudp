@@ -238,8 +238,7 @@ func (server *PlotServer) handleIndex(w http.ResponseWriter, r *http.Request) {
     <title>GoRSUDP - Real-time Seismic Monitoring</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f0f0f0; }
         .container { max-width: 1200px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -248,6 +247,11 @@ func (server *PlotServer) handleIndex(w http.ResponseWriter, r *http.Request) {
         .status-item { text-align: center; padding: 10px; background: #f8f9fa; border-radius: 4px; }
         .plot-container { height: 350px; border: 1px solid #ddd; margin-bottom: 20px; background: white; position: relative; padding: 10px; }
         .plot-container h3 { margin: 0 0 10px 0; text-align: center; font-size: 16px; }
+        .plot-svg { width: 100%; height: calc(100% - 30px); }
+        .axis { font-size: 12px; }
+        .axis path, .axis line { fill: none; stroke: #000; shape-rendering: crispEdges; }
+        .waveform-path { fill: none; stroke: #1f77b4; stroke-width: 1.5px; }
+        .grid-line { stroke: #ddd; stroke-dasharray: 2,2; }
         .channel-tabs { display: flex; margin-bottom: 10px; }
         .channel-tab { padding: 8px 16px; background: #f8f9fa; border: 1px solid #ddd; cursor: pointer; margin-right: 5px; }
         .channel-tab.active { background: #007bff; color: white; }
@@ -289,166 +293,229 @@ func (server *PlotServer) handleIndex(w http.ResponseWriter, r *http.Request) {
         
         <div class="plot-container">
             <h3>Waveform</h3>
-            <canvas id="seismic-chart"></canvas>
+            <svg id="waveform-svg" class="plot-svg"></svg>
         </div>
         
         <div class="plot-container">
             <h3>Spectrogram</h3>
-            <div style="position: relative; width: 100%; height: calc(100% - 30px);">
-                <canvas id="spectrogram-canvas" style="border: 1px solid #ddd; width: 100%; height: 100%;"></canvas>
-                <div id="spectrogram-axis" style="position: absolute; left: 0; top: 0; pointer-events: none;"></div>
-            </div>
+            <svg id="spectrogram-svg" class="plot-svg"></svg>
         </div>
         
         <div id="alerts-container"></div>
     </div>
 
     <script>
-        // Chart.js setup
-        let waveformChart = null;
-        let spectrogramCanvas = null;
-        let spectrogramCtx = null;
+        // D3.js setup
+        let waveformSvg = null;
+        let spectrogramSvg = null;
+        let waveformData = [];
         let spectrogramData = [];
         let channelData = {};
         let activeChannel = null;
-        const maxDataPoints = 2000; // Increased for better spectrogram
-        const sampleRate = 100; // Hz
-        const spectrogramWindowSize = 256; // FFT window size
-        const spectrogramOverlap = 128; // Overlap between windows
         
-        // Configuration from server (will be set dynamically)
+        // Plot dimensions and margins
+        const margin = {top: 20, right: 20, bottom: 40, left: 60};
+        let width, height;
+        
+        // Scales
+        let xScale, yScaleWaveform, yScaleSpectrogram;
+        let colorScale;
+        
+        // Configuration
+        const maxDataPoints = 2000;
+        const sampleRate = 100; // Hz
+        const spectrogramWindowSize = 256;
+        const spectrogramOverlap = 128;
+        const maxSpectrogramPoints = 200;
+        const timeWindowSeconds = 120; // Show last 120 seconds
+        
+        // Server configuration
         let plotConfig = {};
-        let maxFreq = 50; // Default, will be updated from config
-        let minFreq = 0;  // Default, will be updated from config
-        let spectrogramHeight = 300; // Will be updated dynamically
-        let spectrogramWidth = 1200;  // Will be updated dynamically
+        let maxFreq = 50;
+        let minFreq = 0;
 
         // Initialize charts
         function initCharts() {
+            initDimensions();
             initWaveformChart();
-            initSpectrogramCanvas();
+            initSpectrogramChart();
+        }
+        
+        function initDimensions() {
+            const container = document.querySelector('.plot-container');
+            const containerRect = container.getBoundingClientRect();
+            width = containerRect.width - margin.left - margin.right - 40; // Account for padding
+            height = 280 - margin.top - margin.bottom; // Fixed height minus margins
         }
 
         function initWaveformChart() {
-            const ctx = document.getElementById('seismic-chart').getContext('2d');
-            waveformChart = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    datasets: [{
-                        label: 'Seismic Data',
-                        data: [],
-                        borderColor: 'rgb(75, 192, 192)',
-                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
-                        borderWidth: 1,
-                        fill: false,
-                        pointRadius: 0
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: {
-                            type: 'time',
-                            time: {
-                                displayFormats: {
-                                    second: 'mm:ss',
-                                    minute: 'HH:mm'
-                                },
-                                unit: 'second',
-                                stepSize: 10 // Show ticks every 10 seconds
-                            },
-                            title: {
-                                display: true,
-                                text: 'Time'
-                            }
-                        },
-                        y: {
-                            title: {
-                                display: true,
-                                text: 'Velocity (μm/s)'
-                            },
-                            ticks: {
-                                callback: function(value) {
-                                    // Data is already in μm/s, just format appropriately
-                                    if (Math.abs(value) < 0.001 && value !== 0) {
-                                        return value.toExponential(2);
-                                    }
-                                    return value.toFixed(2);
-                                }
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: true
-                        }
-                    },
-                    animation: false
-                }
-            });
+            // Clear any existing SVG
+            d3.select("#waveform-svg").selectAll("*").remove();
+            
+            // Create SVG
+            waveformSvg = d3.select("#waveform-svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom);
+            
+            const g = waveformSvg.append("g")
+                .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+            
+            // Initialize scales
+            const now = new Date();
+            const past = new Date(now.getTime() - timeWindowSeconds * 1000);
+            
+            xScale = d3.scaleTime()
+                .domain([past, now])
+                .range([0, width]);
+            
+            yScaleWaveform = d3.scaleLinear()
+                .domain([-100, 100]) // Will be updated with actual data
+                .range([height, 0]);
+            
+            // Create axes
+            const xAxis = d3.axisBottom(xScale)
+                .tickFormat(d3.timeFormat("%H:%M:%S"));
+            
+            const yAxis = d3.axisLeft(yScaleWaveform);
+            
+            // Add grid lines
+            g.append("g")
+                .attr("class", "grid")
+                .attr("transform", "translate(0," + height + ")")
+                .call(d3.axisBottom(xScale)
+                    .tickSize(-height)
+                    .tickFormat("")
+                );
+            
+            g.append("g")
+                .attr("class", "grid")
+                .call(d3.axisLeft(yScaleWaveform)
+                    .tickSize(-width)
+                    .tickFormat("")
+                );
+            
+            // Add axes
+            g.append("g")
+                .attr("class", "axis x-axis")
+                .attr("transform", "translate(0," + height + ")")
+                .call(xAxis);
+            
+            g.append("g")
+                .attr("class", "axis y-axis")
+                .call(yAxis);
+            
+            // Add axis labels
+            g.append("text")
+                .attr("class", "axis-label")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 0 - margin.left)
+                .attr("x", 0 - (height / 2))
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .text("Velocity (μm/s)");
+            
+            g.append("text")
+                .attr("class", "axis-label")
+                .attr("transform", "translate(" + (width / 2) + ", " + (height + margin.bottom) + ")")
+                .style("text-anchor", "middle")
+                .text("Time");
+            
+            // Add line path
+            g.append("path")
+                .attr("class", "waveform-path")
+                .attr("d", "");
         }
 
-        function initSpectrogramCanvas() {
-            spectrogramCanvas = document.getElementById('spectrogram-canvas');
-            spectrogramCtx = spectrogramCanvas.getContext('2d');
+        function initSpectrogramChart() {
+            // Clear any existing SVG
+            d3.select("#spectrogram-svg").selectAll("*").remove();
             
-            // Set high resolution canvas size
-            const container = spectrogramCanvas.parentElement;
-            const containerWidth = container.clientWidth - 2; // Account for border
-            const containerHeight = container.clientHeight - 2; // Account for border
+            // Create SVG
+            spectrogramSvg = d3.select("#spectrogram-svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom);
             
-            // High resolution for crisp display
-            const pixelRatio = window.devicePixelRatio || 1;
-            spectrogramWidth = containerWidth * pixelRatio;
-            spectrogramHeight = containerHeight * pixelRatio;
+            const g = spectrogramSvg.append("g")
+                .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
             
-            spectrogramCanvas.width = spectrogramWidth;
-            spectrogramCanvas.height = spectrogramHeight;
+            // Initialize scales (same x-scale as waveform for synchronization)
+            const now = new Date();
+            const past = new Date(now.getTime() - timeWindowSeconds * 1000);
             
-            // Scale the canvas back down using CSS
-            spectrogramCanvas.style.width = containerWidth + 'px';
-            spectrogramCanvas.style.height = containerHeight + 'px';
+            xScale = d3.scaleTime()
+                .domain([past, now])
+                .range([0, width]);
             
-            // Scale the drawing context to match the device pixel ratio
-            spectrogramCtx.scale(pixelRatio, pixelRatio);
+            yScaleSpectrogram = d3.scaleLinear()
+                .domain([minFreq, maxFreq])
+                .range([height, 0]);
             
-            // Initialize with black background
-            spectrogramCtx.fillStyle = 'black';
-            spectrogramCtx.fillRect(0, 0, containerWidth, containerHeight);
+            // Color scale for spectrogram
+            colorScale = d3.scaleSequential(d3.interpolateViridis)
+                .domain([0, 1]);
             
-            // Update dimensions for internal use (CSS pixels)
-            spectrogramWidth = containerWidth;
-            spectrogramHeight = containerHeight;
+            // Create axes
+            const xAxis = d3.axisBottom(xScale)
+                .tickFormat(d3.timeFormat("%H:%M:%S"));
             
-            // Draw frequency axis labels
-            drawSpectrogramAxes();
+            const yAxis = d3.axisLeft(yScaleSpectrogram);
+            
+            // Add grid lines
+            g.append("g")
+                .attr("class", "grid")
+                .attr("transform", "translate(0," + height + ")")
+                .call(d3.axisBottom(xScale)
+                    .tickSize(-height)
+                    .tickFormat("")
+                );
+            
+            g.append("g")
+                .attr("class", "grid")
+                .call(d3.axisLeft(yScaleSpectrogram)
+                    .tickSize(-width)
+                    .tickFormat("")
+                );
+            
+            // Add axes
+            g.append("g")
+                .attr("class", "axis x-axis")
+                .attr("transform", "translate(0," + height + ")")
+                .call(xAxis);
+            
+            g.append("g")
+                .attr("class", "axis y-axis")
+                .call(yAxis);
+            
+            // Add axis labels
+            g.append("text")
+                .attr("class", "axis-label")
+                .attr("transform", "rotate(-90)")
+                .attr("y", 0 - margin.left)
+                .attr("x", 0 - (height / 2))
+                .attr("dy", "1em")
+                .style("text-anchor", "middle")
+                .text("Frequency (Hz)");
+            
+            g.append("text")
+                .attr("class", "axis-label")
+                .attr("transform", "translate(" + (width / 2) + ", " + (height + margin.bottom) + ")")
+                .style("text-anchor", "middle")
+                .text("Time");
+            
+            // Create group for spectrogram data
+            g.append("g")
+                .attr("class", "spectrogram-data");
+            
+            // Initialize empty spectrogram data
+            spectrogramData = [];
         }
         
-        function drawSpectrogramAxes() {
-            const axisDiv = document.getElementById('spectrogram-axis');
-            axisDiv.innerHTML = '';
-            
-            // Determine appropriate frequency step
-            const freqRange = maxFreq - minFreq;
-            let step = 1;
-            if (freqRange > 50) step = 10;
-            else if (freqRange > 20) step = 5;
-            else if (freqRange > 10) step = 2;
-            else step = 1;
-            
-            // Create frequency labels
-            for (let freq = minFreq; freq <= maxFreq; freq += step) {
-                const normalizedY = (freq - minFreq) / (maxFreq - minFreq);
-                const y = spectrogramHeight - normalizedY * spectrogramHeight;
-                const label = document.createElement('div');
-                label.style.position = 'absolute';
-                label.style.left = '-30px';
-                label.style.top = y + 'px';
-                label.style.fontSize = '10px';
-                label.style.color = '#666';
-                label.textContent = freq.toFixed(1) + ' Hz';
-                axisDiv.appendChild(label);
+        function updateSpectrogramConfig() {
+            if (yScaleSpectrogram) {
+                yScaleSpectrogram.domain([minFreq, maxFreq]);
+                // Update axes
+                spectrogramSvg.select(".y-axis")
+                    .call(d3.axisLeft(yScaleSpectrogram));
             }
         }
         
@@ -521,21 +588,17 @@ func (server *PlotServer) handleIndex(w http.ResponseWriter, r *http.Request) {
         }
         
         function updateSpectrogramChart() {
-            if (!spectrogramCtx || !activeChannel || !channelData[activeChannel]) return;
+            if (!spectrogramSvg || !activeChannel || !channelData[activeChannel]) return;
             
             const channelInfo = channelData[activeChannel];
             const data = channelInfo.data;
             const times = channelInfo.times;
             
-            if (data.length < spectrogramWindowSize) return;
+            if (data.length < spectrogramWindowSize || times.length === 0) return;
             
-            // Shift existing spectrogram data to the left (4 pixels at a time)
-            const imageData = spectrogramCtx.getImageData(4, 0, spectrogramWidth - 4, spectrogramHeight);
-            spectrogramCtx.clearRect(0, 0, spectrogramWidth, spectrogramHeight);
-            spectrogramCtx.putImageData(imageData, 0, 0);
-            
-            // Calculate new column of spectrogram data
+            // Calculate new spectrogram column
             const latestData = data.slice(-spectrogramWindowSize);
+            const latestTime = times[times.length - 1];
             
             // Apply Hanning window
             const windowedData = latestData.map((val, idx) => {
@@ -546,81 +609,98 @@ func (server *PlotServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             // Compute FFT
             const fftResult = fft(windowedData);
             
-            // Draw new column
+            // Calculate power spectrum
             const freqResolution = sampleRate / spectrogramWindowSize;
             const totalFreqBins = Math.floor(spectrogramWindowSize / 2);
             
-            // Calculate power spectrum and find min/max for normalization
-            const powerSpectrum = [];
+            // Create new spectrogram column data
+            const newColumn = [];
             let minPower = Infinity;
             let maxPower = -Infinity;
             
             for (let k = 0; k < totalFreqBins; k++) {
                 const frequency = k * freqResolution;
                 
-                // Only include frequencies within our specified range
                 if (frequency >= minFreq && frequency <= maxFreq) {
                     const magnitude = fftResult[k].real * fftResult[k].real + fftResult[k].imag * fftResult[k].imag;
                     const power = Math.log10(Math.max(magnitude / spectrogramWindowSize, 1e-10));
-                    powerSpectrum.push({frequency, power});
+                    
+                    newColumn.push({
+                        time: latestTime,
+                        frequency: frequency,
+                        power: power
+                    });
+                    
                     minPower = Math.min(minPower, power);
                     maxPower = Math.max(maxPower, power);
                 }
             }
             
-            // Draw frequency bins for the new time column with high y-axis resolution
-            // Use smaller frequency bins for higher resolution - aim for 2 pixel height bins
-            const targetFreqBinHeight = 2;
-            const numFreqBins = Math.floor(spectrogramHeight / targetFreqBinHeight);
-            const actualFreqBinHeight = spectrogramHeight / numFreqBins;
+            // Normalize power values
+            newColumn.forEach(point => {
+                point.normalizedPower = maxPower > minPower ? (point.power - minPower) / (maxPower - minPower) : 0;
+            });
             
-            // Create interpolated frequency spectrum for higher resolution
-            for (let i = 0; i < numFreqBins; i++) {
-                const freqRatio = i / (numFreqBins - 1);
-                const targetFreq = minFreq + freqRatio * (maxFreq - minFreq);
+            // Add to spectrogram data
+            spectrogramData.push({
+                time: latestTime,
+                data: newColumn
+            });
+            
+            // Keep only recent data
+            const timeThreshold = new Date(latestTime.getTime() - timeWindowSeconds * 1000);
+            spectrogramData = spectrogramData.filter(col => col.time >= timeThreshold);
+            
+            // Render spectrogram
+            renderSpectrogram();
+        }
+        
+        function renderSpectrogram() {
+            if (!spectrogramData.length) return;
+            
+            const g = spectrogramSvg.select("g").select(".spectrogram-data");
+            
+            // Update spectrogram x-axis to match waveform
+            spectrogramSvg.select(".x-axis")
+                .call(d3.axisBottom(xScale).tickFormat(d3.timeFormat("%H:%M:%S")));
+            
+            // Calculate rectangle dimensions
+            const freqStep = (maxFreq - minFreq) / height; // Hz per pixel
+            const timeStep = 1000; // 1 second per column
+            
+            // Create rectangles for each time column
+            const columns = g.selectAll(".spectrogram-column")
+                .data(spectrogramData, d => d.time);
+            
+            // Remove old columns
+            columns.exit().remove();
+            
+            // Add new columns
+            const newColumns = columns.enter()
+                .append("g")
+                .attr("class", "spectrogram-column");
+            
+            // Update all columns
+            const allColumns = newColumns.merge(columns);
+            
+            allColumns.each(function(columnData) {
+                const column = d3.select(this);
                 
-                // Find interpolated power value for this frequency
-                let interpolatedPower = 0;
-                if (powerSpectrum.length > 1) {
-                    // Find the two closest frequency bins for interpolation
-                    let lowerIndex = -1;
-                    let upperIndex = -1;
-                    
-                    for (let j = 0; j < powerSpectrum.length - 1; j++) {
-                        if (powerSpectrum[j].frequency <= targetFreq && powerSpectrum[j + 1].frequency >= targetFreq) {
-                            lowerIndex = j;
-                            upperIndex = j + 1;
-                            break;
-                        }
-                    }
-                    
-                    if (lowerIndex >= 0 && upperIndex >= 0) {
-                        // Linear interpolation
-                        const lowerFreq = powerSpectrum[lowerIndex].frequency;
-                        const upperFreq = powerSpectrum[upperIndex].frequency;
-                        const lowerPower = powerSpectrum[lowerIndex].power;
-                        const upperPower = powerSpectrum[upperIndex].power;
-                        
-                        const ratio = (targetFreq - lowerFreq) / (upperFreq - lowerFreq);
-                        interpolatedPower = lowerPower + ratio * (upperPower - lowerPower);
-                    } else if (powerSpectrum.length > 0) {
-                        // Use nearest neighbor if interpolation isn't possible
-                        const nearest = powerSpectrum.reduce((prev, curr) => 
-                            Math.abs(curr.frequency - targetFreq) < Math.abs(prev.frequency - targetFreq) ? curr : prev
-                        );
-                        interpolatedPower = nearest.power;
-                    }
-                }
+                // Create rectangles for frequency bins
+                const rects = column.selectAll("rect")
+                    .data(columnData.data);
                 
-                const y = spectrogramHeight - (i + 1) * actualFreqBinHeight;
+                rects.enter()
+                    .append("rect")
+                    .merge(rects)
+                    .attr("x", xScale(columnData.time))
+                    .attr("y", function(d) { return yScaleSpectrogram(d.frequency + freqStep); })
+                    .attr("width", Math.max(2, xScale(new Date(columnData.time.getTime() + timeStep)) - xScale(columnData.time)))
+                    .attr("height", function(d) { return Math.max(1, yScaleSpectrogram(d.frequency) - yScaleSpectrogram(d.frequency + freqStep)); })
+                    .attr("fill", function(d) { return colorScale(d.normalizedPower); });
                 
-                // Normalize power to 0-1 range
-                const normalizedPower = maxPower > minPower ? (interpolatedPower - minPower) / (maxPower - minPower) : 0;
-                const color = viridisColormap(normalizedPower);
-                
-                spectrogramCtx.fillStyle = color;
-                spectrogramCtx.fillRect(spectrogramWidth - 4, y, 4, actualFreqBinHeight);
-            }
+                rects.exit().remove();
+            });
         }
 
         // WebSocket connection
@@ -709,8 +789,8 @@ func (server *PlotServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                 maxFreq = 50;
             }
             
-            // Update spectrogram axes
-            drawSpectrogramAxes();
+            // Update spectrogram configuration
+            updateSpectrogramConfig();
         }
 
         function addPlotData(data) {
@@ -772,66 +852,92 @@ func (server *PlotServer) handleIndex(w http.ResponseWriter, r *http.Request) {
             });
             
             activeChannel = channel;
+            
+            // Clear spectrogram data when switching channels
+            spectrogramData = [];
+            if (spectrogramSvg) {
+                spectrogramSvg.select(".spectrogram-data").selectAll("*").remove();
+            }
+            
             updateChart();
         }
 
         function updateChart() {
-            if (!waveformChart || !activeChannel || !channelData[activeChannel]) return;
+            if (!waveformSvg || !activeChannel || !channelData[activeChannel]) return;
             
             const channelInfo = channelData[activeChannel];
             
-            // Calculate mean of current data (like Python implementation)
+            if (channelInfo.times.length === 0) return;
+            
+            // Calculate mean of current data
             const mean = channelInfo.data.length > 0 ? 
                 channelInfo.data.reduce((sum, val) => sum + val, 0) / channelInfo.data.length : 0;
             
             // Create data points with mean-centered values converted to μm/s
-            const chartData = [];
+            waveformData = [];
             for (let i = 0; i < channelInfo.times.length; i++) {
-                chartData.push({
-                    x: channelInfo.times[i],
-                    y: (channelInfo.data[i] - mean) * 1000000 // Convert m/s to μm/s
+                waveformData.push({
+                    time: channelInfo.times[i],
+                    value: (channelInfo.data[i] - mean) / 1000 // Convert nm/s to μm/s
                 });
             }
             
-            waveformChart.data.datasets[0].data = chartData;
-            waveformChart.data.datasets[0].label = activeChannel + ' Seismic Data (mean-centered)';
-            
-            // Update Y-axis label with appropriate units
-            const units = formatUnits(channelInfo.data, channelInfo.units);
-            waveformChart.options.scales.y.title.text = 'Velocity (' + units + ')';
-            
-            // Set Y-axis range based on centered data
-            if (chartData.length > 0) {
-                const centeredValues = chartData.map(point => point.y);
-                const maxAbs = Math.max(...centeredValues.map(Math.abs));
-                const padding = maxAbs * 0.1; // 10% padding
+            // Update time scale
+            if (waveformData.length > 0) {
+                const latestTime = waveformData[waveformData.length - 1].time;
+                const earliestTime = new Date(latestTime.getTime() - timeWindowSeconds * 1000);
                 
-                waveformChart.options.scales.y.min = -maxAbs - padding;
-                waveformChart.options.scales.y.max = maxAbs + padding;
+                xScale.domain([earliestTime, latestTime]);
+                
+                // Update x-axis
+                waveformSvg.select(".x-axis")
+                    .call(d3.axisBottom(xScale).tickFormat(d3.timeFormat("%H:%M:%S")));
             }
             
-            waveformChart.update('none');
+            // Update y-scale based on data
+            if (waveformData.length > 0) {
+                const values = waveformData.map(d => d.value);
+                const maxAbs = Math.max(...values.map(Math.abs));
+                const padding = maxAbs * 0.1;
+                
+                yScaleWaveform.domain([-maxAbs - padding, maxAbs + padding]);
+                
+                // Update y-axis
+                waveformSvg.select(".y-axis")
+                    .call(d3.axisLeft(yScaleWaveform));
+            }
+            
+            // Use all waveform data (don't filter by visible window)
+            const visibleData = waveformData;
+            
+            // Create line generator
+            const line = d3.line()
+                .x(function(d) { return xScale(d.time); })
+                .y(function(d) { return yScaleWaveform(d.value); })
+                .curve(d3.curveLinear);
+            
+            // Update the path
+            waveformSvg.select(".waveform-path")
+                .datum(visibleData)
+                .attr("d", line);
+            
+            // Update grid lines
+            waveformSvg.select(".grid").selectAll("line")
+                .data(xScale.ticks())
+                .join("line")
+                .attr("x1", function(d) { return xScale(d); })
+                .attr("x2", function(d) { return xScale(d); })
+                .attr("y1", 0)
+                .attr("y2", height)
+                .attr("class", "grid-line");
             
             // Always update spectrogram when waveform updates
             updateSpectrogramChart();
         }
 
         function formatUnits(data, originalUnits) {
-            if (!data || data.length === 0) return originalUnits;
-            
-            // Calculate typical amplitude
-            const maxAbs = Math.max(...data.map(Math.abs));
-            
-            // Auto-scale units based on magnitude
-            if (maxAbs > 1) {
-                return 'm/s';
-            } else if (maxAbs > 0.001) {
-                return 'mm/s';
-            } else if (maxAbs > 0.000001) {
-                return 'μm/s';
-            } else {
-                return 'nm/s';
-            }
+            // Always return μm/s since we're converting from nm/s data
+            return 'μm/s';
         }
 
         function updateStatus() {
