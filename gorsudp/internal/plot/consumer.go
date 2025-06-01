@@ -174,12 +174,18 @@ func (c *PlotConsumer) processData(event broker.Event) error {
 	}
 
 	// Calculate individual timestamps for each sample
-	baseTimestamp := time.Unix(0, int64(packet.GetTimestamp()*1e9))
+	// Round base timestamp to nearest millisecond to avoid JavaScript precision issues
+	baseTimestampNanos := int64(packet.GetTimestamp()*1e9)
+	// Round to nearest millisecond (1e6 nanoseconds)
+	baseTimestampMillis := (baseTimestampNanos + 5e5) / 1e6 * 1e6
+	baseTimestamp := time.Unix(0, baseTimestampMillis)
+	
 	sampleRate := 100.0 // TODO: Get from packet or config
-	sampleInterval := time.Duration(1e9 / sampleRate) // nanoseconds per sample
+	sampleInterval := time.Duration(1e9 / sampleRate) // nanoseconds per sample (10ms)
 	
 	sampleTimestamps := make([]time.Time, len(samples))
 	for i := range samples {
+		// Each sample timestamp is exactly 10ms apart
 		sampleTimestamps[i] = baseTimestamp.Add(time.Duration(i) * sampleInterval)
 	}
 

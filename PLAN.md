@@ -107,9 +107,24 @@ gorsudp/
 │   ├── shakenet/               # Raspberry Shake通信
 │   ├── config/                 # 設定管理
 │   └── inventory/              # 機器情報管理
-├── web/                         # Web UI（静的ファイル）
-│   ├── static/                 # CSS, JS, 画像
-│   └── templates/              # HTMLテンプレート
+├── webapp/                      # Next.js フロントエンドアプリケーション
+│   ├── src/                    # TypeScript ソースコード
+│   │   ├── components/         # Reactコンポーネント
+│   │   │   ├── charts/         # D3.js チャートコンポーネント
+│   │   │   │   ├── Waveform.tsx      # 波形表示コンポーネント
+│   │   │   │   └── Spectrogram.tsx   # スペクトログラムコンポーネント
+│   │   │   ├── layout/         # レイアウトコンポーネント
+│   │   │   └── ui/             # UI共通コンポーネント
+│   │   ├── hooks/              # Custom Hooks
+│   │   ├── types/              # TypeScript型定義
+│   │   ├── utils/              # ユーティリティ関数
+│   │   └── pages/              # Next.js ページコンポーネント
+│   ├── public/                 # 静的ファイル
+│   ├── styles/                 # Tailwind CSS設定
+│   ├── package.json            # Node.js依存関係
+│   ├── next.config.js          # Next.js設定
+│   ├── tailwind.config.js      # Tailwind設定
+│   └── tsconfig.json           # TypeScript設定
 ├── testdata/                    # テストデータファイル
 └── deploy/                      # デプロイメント設定
     ├── docker/                 # Docker設定
@@ -1246,6 +1261,455 @@ jobs:
 
 ---
 
+---
+
+## フロントエンド分離実装計画
+
+### 現状分析
+
+現在のWeb interface実装は以下の課題があります：
+- プリミティブなHTML内インラインJavaScript
+- D3.jsロジックが単一ファイルに集約（1000行超）
+- 保守性・拡張性の低いコード構造
+- TypeScriptによる型安全性なし
+
+### 新アーキテクチャ設計
+
+#### 技術スタック
+- **Frontend**: Next.js 14+ (App Router)
+- **Language**: TypeScript 5+
+- **Styling**: Tailwind CSS 3+
+- **Visualization**: D3.js 7+
+- **State Management**: Zustand (軽量状態管理)
+- **API Communication**: WebSocket + REST API
+
+#### フロントエンド・バックエンド分離設計
+
+```
+┌─────────────────────────────────────────────────┐
+│                Frontend (Next.js)              │
+│  ┌─────────────────┐    ┌─────────────────┐    │
+│  │   Waveform      │    │  Spectrogram    │    │
+│  │  Component      │    │   Component     │    │
+│  │                 │    │                 │    │
+│  │ ┌─────────────┐ │    │ ┌─────────────┐ │    │
+│  │ │ D3.js Chart │ │    │ │ D3.js Chart │ │    │
+│  │ │   Rendering │ │    │ │   Rendering │ │    │
+│  │ └─────────────┘ │    │ └─────────────┘ │    │
+│  └─────────────────┘    └─────────────────┘    │
+│              │                    │              │
+│              └────────┬───────────┘              │
+│                       │                          │
+│           ┌─────────────────────────┐             │
+│           │    WebSocket Hook       │             │
+│           │   (useWebSocket)        │             │
+│           └─────────────────────────┘             │
+└─────────────────────┬───────────────────────────┘
+                      │ WebSocket/HTTP
+┌─────────────────────┴───────────────────────────┐
+│              Backend (Go)                       │
+│  ┌─────────────────────────────────────────┐    │
+│  │            Plot Server              │    │
+│  │                                         │    │
+│  │ ┌─────────────┐  ┌─────────────┐      │    │
+│  │ │ WebSocket   │  │ REST API    │      │    │
+│  │ │ Manager     │  │ Endpoints   │      │    │
+│  │ └─────────────┘  └─────────────┘      │    │
+│  └─────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────┘
+```
+
+#### API設計
+
+**WebSocket Messages:**
+```typescript
+// Real-time data streaming
+type PlotDataMessage = {
+  type: 'plot_data'
+  data: {
+    channel: string
+    timestamp: string
+    samples: number[]
+    sample_rate: number
+    units: string
+  }
+}
+
+type AlertMessage = {
+  type: 'alert'
+  data: {
+    channel: string
+    timestamp: string
+    stalta_ratio: number
+    message: string
+  }
+}
+
+type SystemStatusMessage = {
+  type: 'system_status'
+  data: {
+    timestamp: string
+    active_channels: string[]
+    client_count: number
+    packets_received: number
+    alerts_triggered: number
+    uptime: string
+  }
+}
+```
+
+**REST API Endpoints:**
+```typescript
+// Configuration and historical data
+GET /api/config          // システム設定取得
+GET /api/channels        // 利用可能チャンネル一覧
+GET /api/recent/:channel // 直近データ取得（初期表示用）
+GET /api/status          // システム状態確認
+```
+
+### コンポーネント設計
+
+#### 1. Waveformコンポーネント
+
+```typescript
+// src/components/charts/Waveform.tsx
+interface WaveformProps {
+  data: WaveformData[]
+  width: number
+  height: number
+  channel: string
+  timeWindow: number // seconds
+  showGrid?: boolean
+  autoScale?: boolean
+}
+
+export const Waveform: React.FC<WaveformProps> = ({
+  data,
+  width,
+  height,
+  channel,
+  timeWindow,
+  showGrid = true,
+  autoScale = true
+}) => {
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [scales, setScales] = useState<{x: d3.ScaleTime<number, number>, y: d3.ScaleLinear<number, number>}>()
+  
+  // D3.js initialization and update logic
+  useEffect(() => {
+    if (!svgRef.current || !data.length) return
+    
+    const svg = d3.select(svgRef.current)
+    
+    // Clear previous content
+    svg.selectAll("*").remove()
+    
+    // Setup scales, axes, and rendering logic
+    setupWaveformChart(svg, data, width, height, timeWindow, autoScale)
+  }, [data, width, height, timeWindow, autoScale])
+  
+  return (
+    <div className="waveform-container">
+      <div className="chart-header">
+        <h3 className="text-lg font-semibold">Waveform - {channel}</h3>
+        <WaveformControls 
+          onTimeWindowChange={setTimeWindow}
+          onAutoScaleToggle={setAutoScale}
+        />
+      </div>
+      <svg
+        ref={svgRef}
+        width={width}
+        height={height}
+        className="waveform-chart"
+      />
+    </div>
+  )
+}
+```
+
+#### 2. Spectrogramコンポーネント
+
+```typescript
+// src/components/charts/Spectrogram.tsx
+interface SpectrogramProps {
+  data: WaveformData[]
+  width: number
+  height: number
+  channel: string
+  fftSize: number
+  overlapRatio: number
+  frequencyRange: [number, number]
+  colorScale?: 'viridis' | 'plasma' | 'inferno'
+}
+
+export const Spectrogram: React.FC<SpectrogramProps> = ({
+  data,
+  width,
+  height,
+  channel,
+  fftSize,
+  overlapRatio,
+  frequencyRange,
+  colorScale = 'viridis'
+}) => {
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [spectrogramData, setSpectrogramData] = useState<SpectrogramData[]>([])
+  
+  // FFT processing in Web Worker
+  const processFFT = useCallback(async (samples: number[]) => {
+    const worker = new Worker('/workers/fft-worker.js')
+    
+    return new Promise<SpectrogramColumn>((resolve) => {
+      worker.postMessage({
+        samples,
+        fftSize,
+        sampleRate: 100,
+        frequencyRange
+      })
+      
+      worker.onmessage = (e) => {
+        resolve(e.data)
+        worker.terminate()
+      }
+    })
+  }, [fftSize, frequencyRange])
+  
+  // Update spectrogram when new data arrives
+  useEffect(() => {
+    if (!data.length) return
+    
+    const latestSamples = data.slice(-fftSize)
+    if (latestSamples.length < fftSize) return
+    
+    processFFT(latestSamples.map(d => d.value)).then(column => {
+      setSpectrogramData(prev => {
+        const updated = [...prev, column]
+        // Keep only recent data within time window
+        const cutoffTime = Date.now() - (timeWindow * 1000)
+        return updated.filter(col => col.timestamp > cutoffTime)
+      })
+    })
+  }, [data, processFFT])
+  
+  // D3.js rendering
+  useEffect(() => {
+    if (!svgRef.current || !spectrogramData.length) return
+    
+    const svg = d3.select(svgRef.current)
+    renderSpectrogram(svg, spectrogramData, width, height, colorScale)
+  }, [spectrogramData, width, height, colorScale])
+  
+  return (
+    <div className="spectrogram-container">
+      <div className="chart-header">
+        <h3 className="text-lg font-semibold">Spectrogram - {channel}</h3>
+        <SpectrogramControls
+          fftSize={fftSize}
+          onFFTSizeChange={setFFTSize}
+          colorScale={colorScale}
+          onColorScaleChange={setColorScale}
+        />
+      </div>
+      <svg
+        ref={svgRef}
+        width={width}
+        height={height}
+        className="spectrogram-chart"
+      />
+      <ColorLegend scale={colorScale} />
+    </div>
+  )
+}
+```
+
+### Custom Hooks設計
+
+#### WebSocket管理Hook
+
+```typescript
+// src/hooks/useWebSocket.ts
+export const useWebSocket = (url: string) => {
+  const [socket, setSocket] = useState<WebSocket | null>(null)
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected')
+  const [lastMessage, setLastMessage] = useState<any>(null)
+  
+  const connect = useCallback(() => {
+    const ws = new WebSocket(url)
+    
+    ws.onopen = () => {
+      setConnectionStatus('connected')
+      setSocket(ws)
+    }
+    
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data)
+        setLastMessage(message)
+      } catch (error) {
+        console.error('Failed to parse WebSocket message:', error)
+      }
+    }
+    
+    ws.onclose = () => {
+      setConnectionStatus('disconnected')
+      setSocket(null)
+      // Auto-reconnect after 5 seconds
+      setTimeout(connect, 5000)
+    }
+    
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error)
+      setConnectionStatus('disconnected')
+    }
+  }, [url])
+  
+  useEffect(() => {
+    connect()
+    
+    return () => {
+      socket?.close()
+    }
+  }, [connect])
+  
+  const sendMessage = useCallback((message: any) => {
+    if (socket?.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify(message))
+    }
+  }, [socket])
+  
+  return {
+    connectionStatus,
+    lastMessage,
+    sendMessage,
+    reconnect: connect
+  }
+}
+```
+
+#### リアルタイムデータ管理Hook
+
+```typescript
+// src/hooks/useRealtimeData.ts
+export const useRealtimeData = (maxDataPoints = 12000) => {
+  const [channels, setChannels] = useState<Map<string, ChannelData>>(new Map())
+  const [activeChannel, setActiveChannel] = useState<string>('')
+  
+  const addData = useCallback((plotData: PlotDataMessage['data']) => {
+    setChannels(prev => {
+      const updated = new Map(prev)
+      const channelData = updated.get(plotData.channel) || {
+        data: [],
+        units: plotData.units,
+        sampleRate: plotData.sample_rate
+      }
+      
+      // Add new samples with timestamps
+      const baseTime = new Date(plotData.timestamp)
+      const newSamples = plotData.samples.map((value, index) => ({
+        timestamp: new Date(baseTime.getTime() + (index * 1000 / plotData.sample_rate)),
+        value
+      }))
+      
+      channelData.data.push(...newSamples)
+      
+      // Keep only recent data
+      if (channelData.data.length > maxDataPoints) {
+        channelData.data.splice(0, channelData.data.length - maxDataPoints)
+      }
+      
+      updated.set(plotData.channel, channelData)
+      return updated
+    })
+    
+    // Set first channel as active if none selected
+    if (!activeChannel && plotData.channel) {
+      setActiveChannel(plotData.channel)
+    }
+  }, [maxDataPoints, activeChannel])
+  
+  const getChannelData = useCallback((channel: string) => {
+    return channels.get(channel)?.data || []
+  }, [channels])
+  
+  const getChannelList = useCallback(() => {
+    return Array.from(channels.keys())
+  }, [channels])
+  
+  return {
+    channels,
+    activeChannel,
+    setActiveChannel,
+    addData,
+    getChannelData,
+    getChannelList
+  }
+}
+```
+
+### 開発・ビルド設定
+
+#### package.json
+```json
+{
+  "name": "gorsudp-webapp",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "^14.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "d3": "^7.8.0",
+    "zustand": "^4.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.0.0",
+    "@types/react-dom": "^18.0.0",
+    "@types/d3": "^7.4.0",
+    "typescript": "^5.0.0",
+    "tailwindcss": "^3.3.0",
+    "autoprefixer": "^10.4.0",
+    "postcss": "^8.4.0",
+    "eslint": "^8.0.0",
+    "eslint-config-next": "^14.0.0"
+  }
+}
+```
+
+### 移行戦略
+
+#### フェーズ1: 基盤構築（2週間）
+- [ ] Next.js プロジェクト初期化
+- [ ] TypeScript設定とTailwind CSS導入
+- [ ] 基本的なレイアウトコンポーネント作成
+- [ ] WebSocket接続とデータ受信の実装
+
+#### フェーズ2: チャートコンポーネント実装（3週間）
+- [ ] Waveformコンポーネント実装
+- [ ] Spectrogramコンポーネント実装
+- [ ] D3.jsロジックの分離とTypeScript化
+- [ ] パフォーマンス最適化（Web Workers使用）
+
+#### フェーズ3: UI/UX向上（2週間）
+- [ ] レスポンシブデザイン対応
+- [ ] アクセシビリティ改善
+- [ ] エラーハンドリングとローディング状態
+- [ ] 設定パネルとコントロール実装
+
+#### フェーズ4: 統合とデプロイ（1週間）
+- [ ] Go側APIとの統合テスト
+- [ ] ビルド最適化と静的ファイル生成
+- [ ] Docker統合とデプロイメント設定
+- [ ] ドキュメント更新
+
 **更新履歴**
 - 2024-01-XX: 初版作成
 - 2024-XX-XX: フェーズ1完了後の見直し予定
+- 2025-01-XX: フロントエンド分離実装計画追加

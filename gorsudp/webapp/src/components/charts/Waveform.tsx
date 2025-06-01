@@ -245,9 +245,15 @@ export const Waveform: React.FC<WaveformProps> = ({
       
       // Check for duplicate timestamps that might cause issues
       const timeMap = new Map<string, number>()
+      const timeMapMillis = new Map<number, number>()
       let duplicateCount = 0
+      let duplicateMillisCount = 0
+      
       validData.forEach((point, index) => {
         const timeKey = point.timestamp.toISOString()
+        const timeMillis = point.timestamp.getTime()
+        
+        // Check ISO string duplicates
         if (timeMap.has(timeKey)) {
           duplicateCount++
           if (duplicateCount <= 3) {
@@ -256,15 +262,62 @@ export const Waveform: React.FC<WaveformProps> = ({
         } else {
           timeMap.set(timeKey, index)
         }
+        
+        // Check millisecond duplicates
+        if (timeMapMillis.has(timeMillis)) {
+          duplicateMillisCount++
+          if (duplicateMillisCount <= 3) {
+            console.log(`🟡 Duplicate milliseconds ${duplicateMillisCount}: ${timeMillis} at indices ${timeMapMillis.get(timeMillis)} and ${index}`)
+            console.log(`   ISO strings: ${validData[timeMapMillis.get(timeMillis)!].timestamp.toISOString()} vs ${point.timestamp.toISOString()}`)
+          }
+        } else {
+          timeMapMillis.set(timeMillis, index)
+        }
       })
       
       if (duplicateCount > 0) {
         console.log(`🔴 Total duplicate timestamps found: ${duplicateCount}`)
       }
+      if (duplicateMillisCount > 0) {
+        console.log(`🟡 Total duplicate milliseconds found: ${duplicateMillisCount}`)
+      }
+      
+      // Check timestamp precision
+      if (validData.length > 2) {
+        const diff1 = validData[1].timestamp.getTime() - validData[0].timestamp.getTime()
+        const diff2 = validData[2].timestamp.getTime() - validData[1].timestamp.getTime()
+        console.log(`⏱️ Time differences: ${diff1}ms, ${diff2}ms (expected: 10ms)`)
+        console.log(`⏱️ First 3 timestamps:`)
+        validData.slice(0, 3).forEach((d, i) => {
+          console.log(`   ${i}: ${d.timestamp.toISOString()} (${d.timestamp.getTime()}ms)`)
+        })
+      }
       
       // Log first few coordinates that will be generated
-      const sampleCoords = validData.slice(0, 5).map(d => `(${xScale(d.timestamp).toFixed(1)}, ${yScale(d.value).toFixed(1)})`)
+      const sampleCoords = validData.slice(0, 5).map(d => `(${xScale(d.timestamp).toFixed(3)}, ${yScale(d.value).toFixed(1)})`)
       console.log('🎯 First 5 coordinates:', sampleCoords.join(' → '))
+      
+      // Check for duplicate X coordinates
+      const xCoordMap = new Map<string, number>()
+      let duplicateXCount = 0
+      validData.forEach((point, index) => {
+        const xCoord = xScale(point.timestamp).toFixed(3)
+        if (xCoordMap.has(xCoord)) {
+          duplicateXCount++
+          if (duplicateXCount <= 3) {
+            const prevIndex = xCoordMap.get(xCoord)!
+            console.log(`🟠 Duplicate X coordinate ${duplicateXCount}: ${xCoord} at indices ${prevIndex} and ${index}`)
+            console.log(`   Times: ${validData[prevIndex].timestamp.toISOString()} vs ${point.timestamp.toISOString()}`)
+            console.log(`   Millis: ${validData[prevIndex].timestamp.getTime()} vs ${point.timestamp.getTime()}`)
+          }
+        } else {
+          xCoordMap.set(xCoord, index)
+        }
+      })
+      
+      if (duplicateXCount > 0) {
+        console.log(`🟠 Total duplicate X coordinates found: ${duplicateXCount}`)
+      }
     }
     
     // Create line generator (remove .defined() to prevent unwanted connections)

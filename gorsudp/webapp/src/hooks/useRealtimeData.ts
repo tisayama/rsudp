@@ -18,6 +18,10 @@ export const useRealtimeData = (maxDataPoints = 12000): UseRealtimeDataReturn =>
 
   const addData = useCallback((plotData: PlotDataMessage['data']) => {
     console.log('📊 Adding data for channel:', plotData.channel, 'samples:', plotData.samples.length)
+    console.log('📊 Has sample_timestamps:', !!plotData.sample_timestamps)
+    if (plotData.sample_timestamps) {
+      console.log('📊 First 3 sample timestamps:', plotData.sample_timestamps.slice(0, 3))
+    }
     setChannels(prevChannels => {
       const updated = new Map(prevChannels)
       const channelData = updated.get(plotData.channel) || {
