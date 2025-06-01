@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/tisayama/gorsudp/internal/broker"
@@ -21,8 +20,6 @@ type PlotConsumer struct {
 	stream           *stream.Stream
 	channelFilter    []string
 	screenshotMgr    *screenshot.ScreenshotManager
-	lastTimestamps   map[string]time.Time // Track last timestamp per channel for deduplication
-	timestampMutex   sync.RWMutex         // Protect timestamp map
 }
 
 // NewPlotConsumer creates a new plot consumer
@@ -69,12 +66,11 @@ func NewPlotConsumer(cfg config.Plot) (*PlotConsumer, error) {
 	}
 
 	consumer := &PlotConsumer{
-		id:             "plot",
-		config:         cfg,
-		plotServer:     NewPlotServer(plotConfig),
-		stream:         stream.NewStream(),
-		channelFilter:  cfg.Channels,
-		lastTimestamps: make(map[string]time.Time),
+		id:            "plot",
+		config:        cfg,
+		plotServer:    NewPlotServer(plotConfig),
+		stream:        stream.NewStream(),
+		channelFilter: cfg.Channels,
 	}
 
 	// Initialize screenshot manager if eq_screenshots is enabled
@@ -165,21 +161,6 @@ func (c *PlotConsumer) processData(event broker.Event) error {
 		return nil
 	}
 
-	// Convert packet timestamp to time.Time
-	packetTimestamp := time.Unix(0, int64(packet.GetTimestamp()*1e9))
-	
-	// Check for duplicate timestamps to prevent duplicate waveform data
-	c.timestampMutex.Lock()
-	lastTimestamp, exists := c.lastTimestamps[packet.Channel]
-	if exists && !packetTimestamp.After(lastTimestamp) {
-		c.timestampMutex.Unlock()
-		log.Printf("⚠️ Skipping duplicate/old timestamp for channel %s: %s (last: %s)", 
-			packet.Channel, packetTimestamp.Format(time.RFC3339Nano), lastTimestamp.Format(time.RFC3339Nano))
-		return nil
-	}
-	c.lastTimestamps[packet.Channel] = packetTimestamp
-	c.timestampMutex.Unlock()
-
 	// Update stream with packet data
 	err := c.stream.UpdateFromPacket(packet, "Z0000", "AM")
 	if err != nil {
@@ -195,7 +176,7 @@ func (c *PlotConsumer) processData(event broker.Event) error {
 	// Convert to plot data format
 	plotData := PlotData{
 		Channel:    packet.Channel,
-		Timestamp:  packetTimestamp,
+		Timestamp:  time.Unix(0, int64(packet.GetTimestamp()*1e9)),
 		Samples:    samples,
 		SampleRate: 100.0, // TODO: Get from packet or config
 		Units:      c.getUnits(packet.Channel),
