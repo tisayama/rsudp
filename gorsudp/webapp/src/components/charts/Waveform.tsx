@@ -52,11 +52,11 @@ export const Waveform: React.FC<WaveformProps> = ({
 
   // Mount effect to track component lifecycle
   useEffect(() => {
-    console.log('🔥 Waveform component MOUNTED for channel:', channel)
+    // console.log('🔥 Waveform component MOUNTED for channel:', channel)
     mountedRef.current = true
     
     return () => {
-      console.log('💀 Waveform component UNMOUNTED for channel:', channel)
+      // console.log('💀 Waveform component UNMOUNTED for channel:', channel)
       mountedRef.current = false
     }
   }, [channel])
@@ -65,29 +65,28 @@ export const Waveform: React.FC<WaveformProps> = ({
     const renderTime = new Date().toISOString()
     const componentId = `waveform-${channel}-${Math.random().toString(36).substr(2, 9)}`
     
-    // Create a unique key for this render based on data and props
-    const renderKey = `${channel}-${data.length}-${width}-${height}-${timeWindow}`
+    // Create a unique key for this render based on data content, not just length
+    // Use the timestamp of the last data point to ensure updates when data changes
+    const lastDataTimestamp = data.length > 0 ? data[data.length - 1].timestamp.getTime() : 0
+    const renderKey = `${channel}-${data.length}-${lastDataTimestamp}-${width}-${height}-${timeWindow}`
     
-    console.log('🌊 Waveform render:', componentId, 'data:', data.length, 'time:', renderTime)
-    console.log('🌊 SVG ref element:', svgRef.current?.id || 'no-id')
-    console.log('🔐 Render key:', renderKey, 'last key:', lastRenderKey.current)
-    console.log('🔐 Already rendering:', renderingRef.current)
-    console.log('🔐 Component mounted:', mountedRef.current)
+    // console.log('🌊 Waveform render:', componentId, 'data:', data.length, 'time:', renderTime)
+    // console.log('🔐 Render key:', renderKey, 'last key:', lastRenderKey.current)
     
     // Skip rendering if component is not properly mounted
     if (!mountedRef.current) {
-      console.log('⛔ Skipping render: component not mounted')
+      // console.log('⛔ Skipping render: component not mounted')
       return
     }
     
     // Check if already rendering or same render
     if (renderingRef.current) {
-      console.log('⛔ Skipping render: already in progress')
+      // console.log('⛔ Skipping render: already in progress')
       return
     }
     
     if (renderKey === lastRenderKey.current) {
-      console.log('⛔ Skipping render: same render key')
+      // console.log('⛔ Skipping render: same render key')
       return
     }
     
@@ -95,7 +94,7 @@ export const Waveform: React.FC<WaveformProps> = ({
     renderingRef.current = true
     lastRenderKey.current = renderKey
     
-    console.log('✅ Starting render with key:', renderKey)
+    // console.log('✅ Starting render with key:', renderKey)
     
     if (!svgRef.current) {
       renderingRef.current = false
@@ -299,7 +298,7 @@ export const Waveform: React.FC<WaveformProps> = ({
     } finally {
       // Always clear rendering guard
       renderingRef.current = false
-      console.log('🔓 Render complete, guard cleared')
+      // console.log('🔓 Render complete, guard cleared')
     }
   }, [data, width, height, timeWindow, showGrid, autoScale, units, channel])
 

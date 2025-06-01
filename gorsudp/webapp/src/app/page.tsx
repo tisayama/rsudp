@@ -76,7 +76,8 @@ export default function Home() {
         setBackendConfig(configData.data)
         break
     }
-  }, [lastMessage, addData])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastMessage]) // addData is omitted intentionally as it's stable
 
   // Fetch initial config
   useEffect(() => {

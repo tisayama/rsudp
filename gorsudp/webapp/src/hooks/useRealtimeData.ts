@@ -17,10 +17,18 @@ export const useRealtimeData = (maxDataPoints = 12000): UseRealtimeDataReturn =>
   const [activeChannel, setActiveChannel] = useState<string>('')
 
   const addData = useCallback((plotData: PlotDataMessage['data']) => {
-    // console.log('📊 Adding data for channel:', plotData.channel, 'samples:', plotData.samples.length)
+    console.log(`📊 [${new Date().toISOString()}] Adding data for channel: ${plotData.channel}, samples: ${plotData.samples.length}`)
+    
     setChannels(prevChannels => {
+      // Create a new Map to ensure React detects the change
       const updated = new Map(prevChannels)
-      const channelData = updated.get(plotData.channel) || {
+      
+      // Get existing channel data or create new
+      const existingData = updated.get(plotData.channel)
+      const channelData = existingData ? {
+        ...existingData,
+        data: [...existingData.data]  // Create new array to ensure immutability
+      } : {
         data: [],
         units: plotData.units,
         sampleRate: plotData.sample_rate
@@ -47,13 +55,19 @@ export const useRealtimeData = (maxDataPoints = 12000): UseRealtimeDataReturn =>
       })
 
       // Add new samples to existing data
+      const beforeLength = channelData.data.length
       channelData.data.push(...newSamples)
+      const afterLength = channelData.data.length
+      
+      console.log(`📊 Data length: ${beforeLength} → ${afterLength} (added ${newSamples.length})`)
 
       // Keep only recent data points to prevent memory overflow  
       // Always maintain a sliding window of maxDataPoints
       if (channelData.data.length > maxDataPoints) {
+        const beforeTrim = channelData.data.length
         // Keep the most recent data
         channelData.data = channelData.data.slice(-maxDataPoints)
+        console.log(`✂️ Trimmed data: ${beforeTrim} → ${channelData.data.length} (removed ${beforeTrim - channelData.data.length})`)
       }
 
       // Update channel info
@@ -72,6 +86,8 @@ export const useRealtimeData = (maxDataPoints = 12000): UseRealtimeDataReturn =>
 
   const getChannelData = useCallback((channel: string): WaveformData[] => {
     const channelData = channels.get(channel)
+    const dataLength = channelData?.data?.length || 0
+    console.log(`📊 getChannelData called for ${channel}: ${dataLength} points`)
     // Return a new array reference to ensure React detects changes
     return channelData?.data ? [...channelData.data] : []
   }, [channels])
