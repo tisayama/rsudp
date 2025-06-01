@@ -17,11 +17,7 @@ export const useRealtimeData = (maxDataPoints = 12000): UseRealtimeDataReturn =>
   const [activeChannel, setActiveChannel] = useState<string>('')
 
   const addData = useCallback((plotData: PlotDataMessage['data']) => {
-    console.log('📊 Adding data for channel:', plotData.channel, 'samples:', plotData.samples.length)
-    console.log('📊 Has sample_timestamps:', !!plotData.sample_timestamps)
-    if (plotData.sample_timestamps) {
-      console.log('📊 First 3 sample timestamps:', plotData.sample_timestamps.slice(0, 3))
-    }
+    // console.log('📊 Adding data for channel:', plotData.channel, 'samples:', plotData.samples.length)
     setChannels(prevChannels => {
       const updated = new Map(prevChannels)
       const channelData = updated.get(plotData.channel) || {
@@ -56,17 +52,9 @@ export const useRealtimeData = (maxDataPoints = 12000): UseRealtimeDataReturn =>
       // Keep only recent data points to prevent memory overflow  
       // Always maintain a sliding window of maxDataPoints
       if (channelData.data.length > maxDataPoints) {
-        const excessPoints = channelData.data.length - maxDataPoints
-        channelData.data.splice(0, excessPoints)
+        // Keep the most recent data
+        channelData.data = channelData.data.slice(-maxDataPoints)
       }
-      
-      // Remove duplicates within the current window (if any)
-      // This is more efficient than checking against all historical data
-      const uniqueData = new Map<number, WaveformData>()
-      channelData.data.forEach(point => {
-        uniqueData.set(point.timestamp.getTime(), point)
-      })
-      channelData.data = Array.from(uniqueData.values())
 
       // Update channel info
       channelData.units = plotData.units

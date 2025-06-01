@@ -119,6 +119,9 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     })
   }, [fftSize, frequencyRange])
 
+  // Track last processed timestamp to avoid reprocessing
+  const lastProcessedTimestamp = useRef<number>(0)
+  
   // Update spectrogram when new data arrives with overlap
   useEffect(() => {
     if (data.length < fftSize) return
@@ -126,10 +129,15 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     // Calculate step size based on overlap
     const stepSize = Math.floor(fftSize * (1 - overlapRatio))
     
-    // Process multiple FFT windows if we have enough new data
-    const existingTimestamps = new Set(spectrogramData.map(d => d.timestamp))
+    // Find the latest complete window we haven't processed yet
+    const latestDataTimestamp = data[data.length - 1]?.timestamp.getTime() || 0
     
-    // Start from the end and work backwards to ensure we capture the latest data
+    // Only process if we have new data
+    if (latestDataTimestamp <= lastProcessedTimestamp.current) {
+      return
+    }
+    
+    // Start from the end and work backwards to find unprocessed windows
     for (let i = data.length - fftSize; i >= 0; i -= stepSize) {
       const windowData = data.slice(i, i + fftSize)
       if (windowData.length === fftSize) {
@@ -137,15 +145,16 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
         const middleIndex = Math.floor(windowData.length / 2)
         const windowTimestamp = windowData[middleIndex].timestamp.getTime()
         
-        // Skip if we already have data for this timestamp
-        if (!existingTimestamps.has(windowTimestamp)) {
+        // Process if this window is newer than last processed
+        if (windowTimestamp > lastProcessedTimestamp.current) {
           const samples = windowData.map(d => d.value)
           processFFT(samples, windowTimestamp)
-          break // Process one window per update to prevent overwhelming the worker
+          lastProcessedTimestamp.current = windowTimestamp
+          break // Process one window per update
         }
       }
     }
-  }, [data, fftSize, overlapRatio, processFFT, spectrogramData])
+  }, [data, fftSize, overlapRatio, processFFT])
 
   // Render spectrogram
   useEffect(() => {
