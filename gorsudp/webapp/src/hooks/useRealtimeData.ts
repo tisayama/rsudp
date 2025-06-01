@@ -50,8 +50,22 @@ export const useRealtimeData = (maxDataPoints = 12000): UseRealtimeDataReturn =>
         }
       })
 
-      // Add new samples to existing data
-      channelData.data.push(...newSamples)
+      // Check for duplicate timestamps before adding (temporary fix)
+      const existingTimestamps = new Set(
+        channelData.data.map(d => d.timestamp.getTime())
+      )
+      
+      const filteredSamples = newSamples.filter(sample => {
+        const tsMillis = sample.timestamp.getTime()
+        if (existingTimestamps.has(tsMillis)) {
+          return false
+        }
+        existingTimestamps.add(tsMillis)
+        return true
+      })
+
+      // Add only non-duplicate samples to existing data
+      channelData.data.push(...filteredSamples)
 
       // Keep only recent data points to prevent memory overflow
       if (channelData.data.length > maxDataPoints) {

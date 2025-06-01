@@ -157,9 +157,9 @@ export const Waveform: React.FC<WaveformProps> = ({
     
     console.log('📊 Processed:', processedData.length, 'points')
 
-    // Setup scales
-    const timeExtent = d3.extent(processedData, d => d.timestamp) as [Date, Date]
-    const xScale = d3.scaleTime()
+    // Setup scales - Use linear scale with millisecond timestamps for better precision
+    const timeExtent = d3.extent(processedData, d => d.timestamp.getTime()) as [number, number]
+    const xScale = d3.scaleLinear()
       .domain(timeExtent)
       .range([0, innerWidth])
 
@@ -294,14 +294,14 @@ export const Waveform: React.FC<WaveformProps> = ({
       }
       
       // Log first few coordinates that will be generated
-      const sampleCoords = validData.slice(0, 5).map(d => `(${xScale(d.timestamp).toFixed(3)}, ${yScale(d.value).toFixed(1)})`)
+      const sampleCoords = validData.slice(0, 5).map(d => `(${xScale(d.timestamp.getTime()).toFixed(3)}, ${yScale(d.value).toFixed(1)})`)
       console.log('🎯 First 5 coordinates:', sampleCoords.join(' → '))
       
       // Check for duplicate X coordinates
       const xCoordMap = new Map<string, number>()
       let duplicateXCount = 0
       validData.forEach((point, index) => {
-        const xCoord = xScale(point.timestamp).toFixed(3)
+        const xCoord = xScale(point.timestamp.getTime()).toFixed(3)
         if (xCoordMap.has(xCoord)) {
           duplicateXCount++
           if (duplicateXCount <= 3) {
@@ -322,7 +322,7 @@ export const Waveform: React.FC<WaveformProps> = ({
     
     // Create line generator (remove .defined() to prevent unwanted connections)
     const line = d3.line<WaveformData>()
-      .x(d => xScale(d.timestamp))
+      .x(d => xScale(d.timestamp.getTime()))
       .y(d => yScale(d.value))
       .curve(d3.curveLinear)
 
