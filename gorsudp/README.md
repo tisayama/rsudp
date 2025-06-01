@@ -27,9 +27,91 @@ chmod +x gorsudp
 
 # Or build from source
 git clone https://github.com/tisayama/gorsudp.git
-cd gorsudp
+cd gorsudp/gorsudp
 make build
 ```
+
+### Development Setup
+
+For development with the Next.js frontend:
+
+#### 1. Build and Start Go Backend
+
+```bash
+# In gorsudp/gorsudp directory
+cd gorsudp/gorsudp
+
+# Create test configuration
+cp test-config.json config.json
+
+# Build and run Go backend
+go run cmd/gorsudp/main.go
+```
+
+The Go backend will start:
+- **UDP listener**: `localhost:8888` (receives seismic data)
+- **Web server**: `localhost:8080` (serves API and WebSocket)
+
+#### 2. Start Next.js Frontend (Development)
+
+```bash
+# In webapp directory
+cd gorsudp/gorsudp/webapp
+
+# Install dependencies (first time only)
+npm install
+
+# Start development server with API proxy
+npm run dev
+```
+
+The Next.js development server will start:
+- **Frontend**: `http://localhost:3000`
+- **API proxy**: Automatically forwards `/api/*` and `/ws` to Go backend
+
+#### 3. Start Test Data Generator (Optional)
+
+```bash
+# In another terminal, generate test seismic data
+cd gorsudp/gorsudp
+go run internal/testdata/live_generator.go
+```
+
+### Production Deployment
+
+#### 1. Build Frontend for Production
+
+```bash
+# Build static frontend
+cd gorsudp/gorsudp/webapp
+npm run build
+
+# This creates dist/ directory with static files
+```
+
+#### 2. Configure Go Backend for Static Files
+
+Update your Go configuration to serve static files from `webapp/dist/`:
+
+```json
+{
+  "plot": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 8080,
+    "static_dir": "./webapp/dist"
+  }
+}
+```
+
+#### 3. Run Combined Production Server
+
+```bash
+# Run Go backend (serves both API and static frontend)
+./gorsudp -config config.json
+```
+
+Access the application at `http://localhost:8080`
 
 ### Configuration
 
@@ -44,13 +126,20 @@ This creates `~/.gorsudp/config.json` with default settings. Edit this file to c
 ### Running
 
 ```bash
-# Run with default configuration
-./gorsudp
+# Development mode (separate Go backend + Next.js frontend)
+# Terminal 1: Go backend
+cd gorsudp/gorsudp && go run cmd/gorsudp/main.go
 
-# Run with custom configuration
+# Terminal 2: Next.js frontend  
+cd gorsudp/gorsudp/webapp && npm run dev
+
+# Production mode (combined server)
+./gorsudp -config config.json
+
+# Custom configuration
 ./gorsudp -config /path/to/config.json
 
-# Run with debug logging
+# Debug logging
 ./gorsudp -debug
 ```
 
@@ -147,15 +236,18 @@ Built-in health monitoring available at `http://localhost:8081/health`:
 ### Prerequisites
 
 - Go 1.21 or later
-- Make (optional)
+- Node.js 18+ and npm 8+ (for frontend development)
+- Make (optional, for Go build automation)
 
 ### Building
+
+#### Go Backend
 
 ```bash
 # Install dependencies
 make deps
 
-# Build
+# Build Go binary
 make build
 
 # Run tests
@@ -163,6 +255,25 @@ make test
 
 # Generate coverage report
 make coverage
+```
+
+#### Next.js Frontend
+
+```bash
+# Navigate to webapp directory
+cd webapp
+
+# Install Node.js dependencies
+npm install
+
+# Development commands
+npm run dev          # Start development server
+npm run build        # Build for production
+npm run lint         # Run ESLint
+npm run type-check   # Run TypeScript checking
+
+# Quality checks (run before commit)
+npm run type-check && npm run lint && npm run build
 ```
 
 ### Project Structure
@@ -177,7 +288,7 @@ gorsudp/
 │   ├── producer/          # UDP data reception
 │   ├── consumer/          # Base consumer interface
 │   ├── alert/             # STA/LTA earthquake detection
-│   ├── plot/              # Real-time visualization
+│   ├── plot/              # Real-time visualization server
 │   ├── notify/            # Notification systems
 │   └── broker/            # Message broker
 ├── pkg/                   # Public packages
@@ -185,7 +296,19 @@ gorsudp/
 │   ├── dsp/               # Digital signal processing
 │   ├── shakenet/          # Raspberry Shake protocol
 │   └── config/            # Configuration management
-└── web/                   # Web UI assets
+├── webapp/                # Next.js Frontend Application
+│   ├── src/               # TypeScript source code
+│   │   ├── app/           # Next.js App Router pages
+│   │   ├── components/    # React components
+│   │   │   ├── charts/    # D3.js chart components
+│   │   │   └── layout/    # Layout components
+│   │   ├── hooks/         # Custom React hooks
+│   │   ├── types/         # TypeScript type definitions
+│   │   └── utils/         # Utility functions
+│   ├── public/            # Static files and Web Workers
+│   ├── dist/              # Production build output
+│   └── package.json       # Node.js dependencies
+└── web/                   # Legacy web assets (deprecated)
 ```
 
 ### Architecture
@@ -193,12 +316,42 @@ gorsudp/
 gorsudp uses a producer-consumer architecture with channel-based message passing:
 
 ```
-UDP Packets → Producer → Message Broker → Consumers
-                           ├── Alert Consumer (STA/LTA)
-                           ├── Plot Consumer (Web UI)
-                           ├── Write Consumer (MiniSEED)
-                           └── Notify Consumers (Twitter, etc.)
+┌─────────────────┐    ┌──────────────────────┐
+│ Raspberry Shake │───▶│     UDP Producer     │
+└─────────────────┘    └──────────┬───────────┘
+                                  │
+                                  ▼
+                       ┌──────────────────────┐
+                       │   Message Broker     │
+                       │   (Channel-based)    │
+                       └─────────┬────────────┘
+                                 │
+                ┌────────────────┼────────────────┐
+                ▼                ▼                ▼
+        ┌───────────────┐ ┌─────────────┐ ┌─────────────┐
+        │ Alert Consumer│ │Plot Consumer│ │Write Consumer│
+        └───────────────┘ └─────────────┘ └─────────────┘
+                │                │                │
+                ▼                ▼                ▼
+        ┌───────────────┐ ┌─────────────┐ ┌─────────────┐
+        │   Notifiers   │ │  WebSocket  │ │ File System │
+        │ (Multi-target)│ │   Server    │ │ (MiniSEED)  │
+        └───────────────┘ └─────────────┘ └─────────────┘
+                                 │
+                                 ▼
+                       ┌─────────────────┐
+                       │ Next.js Frontend│
+                       │ (TypeScript +   │
+                       │  D3.js Charts)  │
+                       └─────────────────┘
 ```
+
+**Frontend Architecture:**
+- **Next.js 14**: App Router with TypeScript
+- **Real-time Updates**: WebSocket connection to Go backend
+- **Charts**: D3.js-based Waveform and Spectrogram components
+- **State Management**: Custom React hooks for data management
+- **Responsive Design**: Mobile-first with Tailwind CSS
 
 ## Performance
 

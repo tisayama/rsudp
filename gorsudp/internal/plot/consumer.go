@@ -173,13 +173,24 @@ func (c *PlotConsumer) processData(event broker.Event) error {
 		samples[i] = float64(val)
 	}
 
+	// Calculate individual timestamps for each sample
+	baseTimestamp := time.Unix(0, int64(packet.GetTimestamp()*1e9))
+	sampleRate := 100.0 // TODO: Get from packet or config
+	sampleInterval := time.Duration(1e9 / sampleRate) // nanoseconds per sample
+	
+	sampleTimestamps := make([]time.Time, len(samples))
+	for i := range samples {
+		sampleTimestamps[i] = baseTimestamp.Add(time.Duration(i) * sampleInterval)
+	}
+
 	// Convert to plot data format
 	plotData := PlotData{
-		Channel:    packet.Channel,
-		Timestamp:  time.Unix(0, int64(packet.GetTimestamp()*1e9)),
-		Samples:    samples,
-		SampleRate: 100.0, // TODO: Get from packet or config
-		Units:      c.getUnits(packet.Channel),
+		Channel:          packet.Channel,
+		Timestamp:        baseTimestamp,
+		Samples:          samples,
+		SampleRate:       sampleRate,
+		Units:            c.getUnits(packet.Channel),
+		SampleTimestamps: sampleTimestamps,
 	}
 
 	// Send to plot server

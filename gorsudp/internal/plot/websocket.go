@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -12,6 +13,8 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true // Allow connections from any origin in development
 	},
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
 }
 
 // NewWebSocketManager creates a new WebSocket manager
@@ -78,7 +81,7 @@ func (manager *WebSocketManager) run() {
 			if _, ok := manager.clients[client]; ok {
 				delete(manager.clients, client)
 				close(client.send)
-				log.Printf("WebSocket client unregistered. Total clients: %d", len(manager.clients))
+				log.Printf("❌ WebSocket client disconnected. Total clients: %d", len(manager.clients))
 			}
 
 		case message := <-manager.broadcast:
@@ -140,11 +143,15 @@ func (manager *WebSocketManager) GetClientCount() int {
 
 // HandleWebSocket handles WebSocket upgrade requests
 func (manager *WebSocketManager) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
+	log.Printf("🔌 WebSocket upgrade request from %s (User-Agent: %s)", r.RemoteAddr, r.UserAgent())
+	
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("WebSocket upgrade error: %v", err)
+		log.Printf("❌ WebSocket upgrade error from %s: %v", r.RemoteAddr, err)
 		return
 	}
+
+	log.Printf("✅ WebSocket connection established from %s", r.RemoteAddr)
 
 	// Parse channel filters from query parameters
 	channels := parseChannelFilters(r)
@@ -179,7 +186,9 @@ func parseChannelFilters(r *http.Request) []string {
 
 // writePump pumps messages from the hub to the websocket connection
 func (c *Client) writePump(manager *WebSocketManager) {
+	ticker := time.NewTicker(54 * time.Second) // Send ping every 54 seconds
 	defer func() {
+		ticker.Stop()
 		c.conn.Close()
 	}()
 
@@ -187,11 +196,23 @@ func (c *Client) writePump(manager *WebSocketManager) {
 		select {
 		case message, ok := <-c.send:
 			if !ok {
+				log.Printf("📤 WebSocket send channel closed for %s", c.conn.RemoteAddr())
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
-			c.conn.WriteJSON(message)
+			err := c.conn.WriteJSON(message)
+			if err != nil {
+				log.Printf("🔥 WebSocket write error to %s: %v", c.conn.RemoteAddr(), err)
+				return
+			}
+		
+		case <-ticker.C:
+			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				log.Printf("🏓 WebSocket ping error to %s: %v", c.conn.RemoteAddr(), err)
+				return
+			}
 		}
 	}
 }
@@ -203,12 +224,21 @@ func (c *Client) readPump(manager *WebSocketManager) {
 		c.conn.Close()
 	}()
 
+	// Set read deadline and pong handler
+	c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	c.conn.SetPongHandler(func(string) error {
+		c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		return nil
+	})
+
 	for {
 		var msg map[string]interface{}
 		err := c.conn.ReadJSON(&msg)
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WebSocket error: %v", err)
+				log.Printf("🔥 WebSocket unexpected close error from %s: %v", c.conn.RemoteAddr(), err)
+			} else {
+				log.Printf("📞 WebSocket client %s disconnected normally: %v", c.conn.RemoteAddr(), err)
 			}
 			break
 		}

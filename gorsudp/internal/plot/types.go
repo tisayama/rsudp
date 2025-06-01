@@ -9,11 +9,13 @@ import (
 
 // PlotData represents data for plotting
 type PlotData struct {
-	Channel   string    `json:"channel"`
-	Timestamp time.Time `json:"timestamp"`
-	Samples   []float64 `json:"samples"`
-	SampleRate float64  `json:"sample_rate"`
-	Units     string    `json:"units"`
+	Channel    string      `json:"channel"`
+	Timestamp  time.Time   `json:"timestamp"`  // Base timestamp (for backward compatibility)
+	Samples    []float64   `json:"samples"`    // Sample values
+	SampleRate float64     `json:"sample_rate"`
+	Units      string      `json:"units"`
+	// New field: individual timestamps for each sample point
+	SampleTimestamps []time.Time `json:"sample_timestamps,omitempty"`
 }
 
 // SpectrogramData represents spectrogram data

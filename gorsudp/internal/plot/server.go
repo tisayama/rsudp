@@ -13,12 +13,12 @@ import (
 
 // PlotServer manages the web server for real-time plotting
 type PlotServer struct {
-	config       *PlotConfig
-	wsManager    *WebSocketManager
-	server       *http.Server
-	router       *mux.Router
-	dataBuffer   *CircularBuffer
-	systemStats  *SystemStats
+	config      *PlotConfig
+	wsManager   *WebSocketManager
+	server      *http.Server
+	router      *mux.Router
+	dataBuffer  *CircularBuffer
+	systemStats *SystemStats
 }
 
 // CircularBuffer holds recent plot data for new clients
@@ -40,19 +40,19 @@ type SystemStats struct {
 // NewPlotServer creates a new plot server
 func NewPlotServer(config *PlotConfig) *PlotServer {
 	wsManager := NewWebSocketManager()
-	
+
 	server := &PlotServer{
-		config:      config,
-		wsManager:   wsManager,
-		dataBuffer:  NewCircularBuffer(1000), // Keep last 1000 data points
+		config:     config,
+		wsManager:  wsManager,
+		dataBuffer: NewCircularBuffer(1000), // Keep last 1000 data points
 		systemStats: &SystemStats{
 			StartTime:      time.Now(),
 			ActiveChannels: make(map[string]time.Time),
 		},
 	}
-	
+
 	server.setupRoutes()
-	
+
 	return server
 }
 
@@ -80,16 +80,16 @@ func (cb *CircularBuffer) GetRecent(count int) []PlotData {
 	if count > cb.capacity {
 		count = cb.capacity
 	}
-	
+
 	size := cb.index
 	if cb.full {
 		size = cb.capacity
 	}
-	
+
 	if count > size {
 		count = size
 	}
-	
+
 	result := make([]PlotData, count)
 	start := cb.index - count
 	if start < 0 {
@@ -105,27 +105,27 @@ func (cb *CircularBuffer) GetRecent(count int) []PlotData {
 	} else {
 		copy(result, cb.data[start:cb.index])
 	}
-	
+
 	return result
 }
 
 // setupRoutes sets up HTTP routes
 func (server *PlotServer) setupRoutes() {
 	server.router = mux.NewRouter()
-	
+
 	// WebSocket endpoint
 	server.router.HandleFunc("/ws", server.wsManager.HandleWebSocket)
-	
+
 	// API endpoints
 	server.router.HandleFunc("/api/status", server.handleStatus).Methods("GET")
 	server.router.HandleFunc("/api/config", server.handleConfig).Methods("GET")
 	server.router.HandleFunc("/api/channels", server.handleChannels).Methods("GET")
 	server.router.HandleFunc("/api/recent/{channel}", server.handleRecentData).Methods("GET")
-	
+
 	// Static files (will be implemented later with embedded files)
 	server.router.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("./web/static/"))))
 	server.router.HandleFunc("/", server.handleIndex)
-	
+
 	// Setup CORS middleware
 	server.router.Use(corsMiddleware)
 }
@@ -133,39 +133,39 @@ func (server *PlotServer) setupRoutes() {
 // Start starts the plot server
 func (server *PlotServer) Start() error {
 	server.wsManager.Start()
-	
+
 	addr := fmt.Sprintf("%s:%d", server.config.Host, server.config.Port)
 	server.server = &http.Server{
 		Addr:    addr,
 		Handler: server.router,
 	}
-	
+
 	log.Printf("Starting plot server on %s", addr)
-	
+
 	go func() {
 		if err := server.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("Plot server error: %v", err)
 		}
 	}()
-	
+
 	// Start periodic status broadcasting
 	go server.broadcastStatusPeriodically()
-	
+
 	return nil
 }
 
 // Stop stops the plot server
 func (server *PlotServer) Stop() error {
 	log.Println("Stopping plot server...")
-	
+
 	server.wsManager.Stop()
-	
+
 	if server.server != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		return server.server.Shutdown(ctx)
 	}
-	
+
 	return nil
 }
 
@@ -173,7 +173,7 @@ func (server *PlotServer) Stop() error {
 func (server *PlotServer) broadcastStatusPeriodically() {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case <-ticker.C:
@@ -182,7 +182,7 @@ func (server *PlotServer) broadcastStatusPeriodically() {
 			for channel := range server.systemStats.ActiveChannels {
 				activeChannels = append(activeChannels, channel)
 			}
-			
+
 			status := SystemStatus{
 				Timestamp:       time.Now(),
 				ActiveChannels:  activeChannels,
@@ -191,13 +191,13 @@ func (server *PlotServer) broadcastStatusPeriodically() {
 				AlertsTriggered: server.systemStats.AlertsTriggered,
 				Uptime:          time.Since(server.systemStats.StartTime).String(),
 			}
-			
+
 			// Broadcast status
 			message := WebSocketMessage{
 				Type: MessageTypeSystemStatus,
 				Data: status,
 			}
-			
+
 			server.wsManager.Broadcast(message)
 		}
 	}
@@ -208,24 +208,24 @@ func (server *PlotServer) AddPlotData(data PlotData) {
 	server.dataBuffer.Add(data)
 	server.systemStats.PacketsReceived++
 	server.systemStats.ActiveChannels[data.Channel] = data.Timestamp
-	
+
 	message := WebSocketMessage{
 		Type: MessageTypePlotData,
 		Data: data,
 	}
-	
+
 	server.wsManager.Broadcast(message)
 }
 
 // AddAlert broadcasts an alert message
 func (server *PlotServer) AddAlert(alert AlertMessage) {
 	server.systemStats.AlertsTriggered++
-	
+
 	message := WebSocketMessage{
 		Type: MessageTypeAlert,
 		Data: alert,
 	}
-	
+
 	server.wsManager.Broadcast(message)
 }
 
@@ -322,11 +322,10 @@ func (server *PlotServer) handleIndex(w http.ResponseWriter, r *http.Request) {
         let colorScale;
         
         // Configuration
-        const maxDataPoints = 2000;
         const sampleRate = 100; // Hz
         const spectrogramWindowSize = 256;
         const spectrogramOverlap = 128;
-        const maxSpectrogramPoints = 200;
+        const maxSpectrogramPoints = 2000;
         const timeWindowSeconds = 120; // Show last 120 seconds
         
         // Server configuration
@@ -817,6 +816,7 @@ func (server *PlotServer) handleIndex(w http.ResponseWriter, r *http.Request) {
                 channelData[channel].data.push(samples[i]);
             }
             
+			let maxDataPoints = sampleRate * timeWindowSeconds;
             // Keep only last maxDataPoints
             if (channelData[channel].data.length > maxDataPoints) {
                 const excess = channelData[channel].data.length - maxDataPoints;
@@ -987,7 +987,7 @@ func (server *PlotServer) handleIndex(w http.ResponseWriter, r *http.Request) {
     </script>
 </body>
 </html>`
-	
+
 	w.Header().Set("Content-Type", "text/html")
 	w.Write([]byte(html))
 }
@@ -997,7 +997,7 @@ func (server *PlotServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 	for channel := range server.systemStats.ActiveChannels {
 		activeChannels = append(activeChannels, channel)
 	}
-	
+
 	status := SystemStatus{
 		Timestamp:       time.Now(),
 		ActiveChannels:  activeChannels,
@@ -1006,7 +1006,7 @@ func (server *PlotServer) handleStatus(w http.ResponseWriter, r *http.Request) {
 		AlertsTriggered: server.systemStats.AlertsTriggered,
 		Uptime:          time.Since(server.systemStats.StartTime).String(),
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(status)
 }
@@ -1021,12 +1021,12 @@ func (server *PlotServer) handleChannels(w http.ResponseWriter, r *http.Request)
 	for channel := range server.systemStats.ActiveChannels {
 		channels = append(channels, channel)
 	}
-	
+
 	response := map[string]interface{}{
 		"channels": channels,
 		"count":    len(channels),
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
@@ -1034,17 +1034,17 @@ func (server *PlotServer) handleChannels(w http.ResponseWriter, r *http.Request)
 func (server *PlotServer) handleRecentData(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	channel := vars["channel"]
-	
+
 	// Get recent data for the specific channel
 	allData := server.dataBuffer.GetRecent(100)
 	channelData := make([]PlotData, 0)
-	
+
 	for _, data := range allData {
 		if data.Channel == channel || channel == "all" {
 			channelData = append(channelData, data)
 		}
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(channelData)
 }
@@ -1055,12 +1055,12 @@ func corsMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		
+
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		
+
 		next.ServeHTTP(w, r)
 	})
 }
