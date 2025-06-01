@@ -121,8 +121,6 @@ export default function Home() {
             </div>
           </div>
           
-          {/* TEMPORARILY DISABLE Spectrogram for debugging 2-line issue */}
-          {/*
           <div className="chart-container">
             <div className="w-full overflow-x-auto">
               <Spectrogram
@@ -136,7 +134,6 @@ export default function Home() {
               />
             </div>
           </div>
-          */}
         </div>
         
         <AlertsPanel alerts={alerts} />

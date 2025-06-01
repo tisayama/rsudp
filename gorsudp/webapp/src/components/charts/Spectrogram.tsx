@@ -102,40 +102,50 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
   }, [timeWindow])
 
   // Process FFT when new data arrives
-  const processFFT = useCallback(async (samples: number[]) => {
+  const processFFT = useCallback(async (samples: number[], timestamp?: number) => {
     if (!workerRef.current || samples.length < fftSize) {
-      return
-    }
-    
-    // Check if already processing (prevent excessive calls)
-    if (isProcessing) {
       return
     }
     
     setIsProcessing(true)
     
+    // Pass timestamp if provided, otherwise use current time
     workerRef.current.postMessage({
       samples,
       fftSize,
       sampleRate: 100, // Default sample rate
-      frequencyRange
+      frequencyRange,
+      timestamp: timestamp || Date.now()
     })
-  }, [fftSize, frequencyRange]) // Remove isProcessing from dependencies
+  }, [fftSize, frequencyRange])
 
-  // Update spectrogram when new data arrives (debounced)
+  // Update spectrogram when new data arrives with overlap
   useEffect(() => {
-    if (data.length < fftSize || isProcessing) return
+    if (data.length < fftSize) return
     
-    // Use only the latest samples for FFT
-    const latestSamples = data.slice(-fftSize).map(d => d.value)
+    // Calculate step size based on overlap
+    const stepSize = Math.floor(fftSize * (1 - overlapRatio))
     
-    // Debounce FFT processing to prevent excessive calls
-    const timeoutId = setTimeout(() => {
-      processFFT(latestSamples)
-    }, 100) // 100ms debounce
+    // Process multiple FFT windows if we have enough new data
+    const existingTimestamps = new Set(spectrogramData.map(d => d.timestamp))
     
-    return () => clearTimeout(timeoutId)
-  }, [data.length, fftSize, processFFT]) // Use data.length instead of data to reduce re-renders
+    // Start from the end and work backwards to ensure we capture the latest data
+    for (let i = data.length - fftSize; i >= 0; i -= stepSize) {
+      const windowData = data.slice(i, i + fftSize)
+      if (windowData.length === fftSize) {
+        // Use the timestamp of the middle of the window
+        const middleIndex = Math.floor(windowData.length / 2)
+        const windowTimestamp = windowData[middleIndex].timestamp.getTime()
+        
+        // Skip if we already have data for this timestamp
+        if (!existingTimestamps.has(windowTimestamp)) {
+          const samples = windowData.map(d => d.value)
+          processFFT(samples, windowTimestamp)
+          break // Process one window per update to prevent overwhelming the worker
+        }
+      }
+    }
+  }, [data, fftSize, overlapRatio, processFFT, spectrogramData])
 
   // Render spectrogram
   useEffect(() => {
@@ -149,10 +159,25 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     // Clear previous content
     clearSVG(svg)
 
-    // Setup scales
-    const timeExtent = d3.extent(spectrogramData, d => d.timestamp) as [number, number]
-    const xScale = d3.scaleTime()
-      .domain(timeExtent.map(t => new Date(t)))
+    // Setup scales - Use same approach as Waveform for consistent time axis
+    const now = Date.now()
+    const startTime = now - timeWindow * 1000
+    
+    // Use linear scale with millisecond timestamps for consistency with Waveform
+    let timeDomain: [number, number]
+    if (spectrogramData.length > 0) {
+      const dataExtent = d3.extent(spectrogramData, d => d.timestamp) as [number, number]
+      // Use fixed time window to match Waveform behavior
+      timeDomain = [
+        Math.min(startTime, dataExtent[0]),
+        Math.max(now, dataExtent[1])
+      ]
+    } else {
+      timeDomain = [startTime, now]
+    }
+    
+    const xScale = d3.scaleLinear()
+      .domain(timeDomain)
       .range([0, innerWidth])
 
     const yScale = d3.scaleLinear()
@@ -194,7 +219,7 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
         .data(columnData.data)
         .enter()
         .append('rect')
-        .attr('x', xScale(new Date(columnData.timestamp)))
+        .attr('x', xScale(columnData.timestamp))
         .attr('y', d => {
           const y = yScale(d.frequency + freqStep)
           return isNaN(y) || !isFinite(y) ? 0 : y
@@ -208,8 +233,12 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
         .attr('stroke', 'none')
     })
 
-    // Create axes
-    const xAxis = createTimeAxis(xScale, 'bottom')
+    // Create axes - Use custom formatter for linear scale
+    const xAxis = d3.axisBottom(xScale)
+      .tickFormat((d: any) => {
+        const date = new Date(d)
+        return d3.timeFormat('%H:%M:%S')(date)
+      })
     const yAxis = createLinearAxis(yScale, 'left')
 
     // Add X axis

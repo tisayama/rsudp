@@ -155,12 +155,28 @@ export const Waveform: React.FC<WaveformProps> = ({
       value: units === 'nm/s' ? nanometersToMicrometers(d.value) : d.value
     }))
     
-    console.log('📊 Processed:', processedData.length, 'points')
+    // console.log('📊 Processed:', processedData.length, 'points')
 
     // Setup scales - Use linear scale with millisecond timestamps for better precision
-    const timeExtent = d3.extent(processedData, d => d.timestamp.getTime()) as [number, number]
+    // Always show a fixed time window even if data doesn't fill it completely
+    const now = new Date()
+    const startTime = new Date(now.getTime() - timeWindow * 1000)
+    
+    // If we have data, use the actual time range, otherwise use the window
+    let timeDomain: [number, number]
+    if (processedData.length > 0) {
+      const dataExtent = d3.extent(processedData, d => d.timestamp.getTime()) as [number, number]
+      // Use the wider range to ensure scrolling works properly
+      timeDomain = [
+        Math.min(startTime.getTime(), dataExtent[0]),
+        Math.max(now.getTime(), dataExtent[1])
+      ]
+    } else {
+      timeDomain = [startTime.getTime(), now.getTime()]
+    }
+    
     const xScale = d3.scaleLinear()
-      .domain(timeExtent)
+      .domain(timeDomain)
       .range([0, innerWidth])
 
     let yDomain: [number, number]
@@ -180,19 +196,20 @@ export const Waveform: React.FC<WaveformProps> = ({
     // Create main group
     const mainGroup = createGroup(svg, 'main-group', `translate(${margin.left},${margin.top})`)
 
-    // Create grid lines (temporarily disabled for debugging)
-    console.log('🔲 Grid enabled:', showGrid)
-    /*
+    // Create grid lines
     if (showGrid) {
       createGridLines(mainGroup, xScale, { width: innerWidth, height: innerHeight }, 'vertical')
       createGridLines(mainGroup, yScale, { width: innerWidth, height: innerHeight }, 'horizontal')
     }
-    */
 
-    // Create axes (temporarily disabled for debugging)
-    console.log('📊 Temporarily disabling axes for debugging')
-    /*
-    const xAxis = createTimeAxis(xScale, 'bottom')
+    // Create axes
+    // For linear scale, we need a custom axis formatter to show time
+    const xAxis = d3.axisBottom(xScale)
+      .tickFormat((d: any) => {
+        const date = new Date(d)
+        return d3.timeFormat('%H:%M:%S')(date)
+      })
+    
     const yAxis = createLinearAxis(yScale, 'left')
 
     // Add X axis
@@ -207,10 +224,8 @@ export const Waveform: React.FC<WaveformProps> = ({
       .append('g')
       .attr('class', 'y-axis')
       .call(yAxis)
-    */
 
-    // Add axis labels (temporarily disabled for debugging)
-    /*
+    // Add axis labels
     mainGroup
       .append('text')
       .attr('class', 'axis-label')
@@ -231,7 +246,6 @@ export const Waveform: React.FC<WaveformProps> = ({
       .style('font-size', '12px')
       .style('fill', '#666')
       .text('Time')
-    */
 
     // Use processed data directly (filtering was done in processing step)
     const validData = processedData
@@ -243,81 +257,7 @@ export const Waveform: React.FC<WaveformProps> = ({
         last: { t: validData[validData.length - 1].timestamp.toISOString(), v: validData[validData.length - 1].value }
       })
       
-      // Check for duplicate timestamps that might cause issues
-      const timeMap = new Map<string, number>()
-      const timeMapMillis = new Map<number, number>()
-      let duplicateCount = 0
-      let duplicateMillisCount = 0
-      
-      validData.forEach((point, index) => {
-        const timeKey = point.timestamp.toISOString()
-        const timeMillis = point.timestamp.getTime()
-        
-        // Check ISO string duplicates
-        if (timeMap.has(timeKey)) {
-          duplicateCount++
-          if (duplicateCount <= 3) {
-            console.log(`🔴 Duplicate timestamp ${duplicateCount}: ${timeKey} at indices ${timeMap.get(timeKey)} and ${index}`)
-          }
-        } else {
-          timeMap.set(timeKey, index)
-        }
-        
-        // Check millisecond duplicates
-        if (timeMapMillis.has(timeMillis)) {
-          duplicateMillisCount++
-          if (duplicateMillisCount <= 3) {
-            console.log(`🟡 Duplicate milliseconds ${duplicateMillisCount}: ${timeMillis} at indices ${timeMapMillis.get(timeMillis)} and ${index}`)
-            console.log(`   ISO strings: ${validData[timeMapMillis.get(timeMillis)!].timestamp.toISOString()} vs ${point.timestamp.toISOString()}`)
-          }
-        } else {
-          timeMapMillis.set(timeMillis, index)
-        }
-      })
-      
-      if (duplicateCount > 0) {
-        console.log(`🔴 Total duplicate timestamps found: ${duplicateCount}`)
-      }
-      if (duplicateMillisCount > 0) {
-        console.log(`🟡 Total duplicate milliseconds found: ${duplicateMillisCount}`)
-      }
-      
-      // Check timestamp precision
-      if (validData.length > 2) {
-        const diff1 = validData[1].timestamp.getTime() - validData[0].timestamp.getTime()
-        const diff2 = validData[2].timestamp.getTime() - validData[1].timestamp.getTime()
-        console.log(`⏱️ Time differences: ${diff1}ms, ${diff2}ms (expected: 10ms)`)
-        console.log(`⏱️ First 3 timestamps:`)
-        validData.slice(0, 3).forEach((d, i) => {
-          console.log(`   ${i}: ${d.timestamp.toISOString()} (${d.timestamp.getTime()}ms)`)
-        })
-      }
-      
-      // Log first few coordinates that will be generated
-      const sampleCoords = validData.slice(0, 5).map(d => `(${xScale(d.timestamp.getTime()).toFixed(3)}, ${yScale(d.value).toFixed(1)})`)
-      console.log('🎯 First 5 coordinates:', sampleCoords.join(' → '))
-      
-      // Check for duplicate X coordinates
-      const xCoordMap = new Map<string, number>()
-      let duplicateXCount = 0
-      validData.forEach((point, index) => {
-        const xCoord = xScale(point.timestamp.getTime()).toFixed(3)
-        if (xCoordMap.has(xCoord)) {
-          duplicateXCount++
-          if (duplicateXCount <= 3) {
-            const prevIndex = xCoordMap.get(xCoord)!
-            console.log(`🟠 Duplicate X coordinate ${duplicateXCount}: ${xCoord} at indices ${prevIndex} and ${index}`)
-            console.log(`   Times: ${validData[prevIndex].timestamp.toISOString()} vs ${point.timestamp.toISOString()}`)
-            console.log(`   Millis: ${validData[prevIndex].timestamp.getTime()} vs ${point.timestamp.getTime()}`)
-          }
-        } else {
-          xCoordMap.set(xCoord, index)
-        }
-      })
-      
-      if (duplicateXCount > 0) {
-        console.log(`🟠 Total duplicate X coordinates found: ${duplicateXCount}`)
-      }
+      // Removed duplicate checking debug logs for cleaner console output
     }
     
     // Create line generator (remove .defined() to prevent unwanted connections)
@@ -326,33 +266,8 @@ export const Waveform: React.FC<WaveformProps> = ({
       .y(d => yScale(d.value))
       .curve(d3.curveLinear)
 
-    // TEMPORARILY DISABLE segment splitting - use single path for debugging
-    console.log('🧪 Testing single path without segmentation')
-    
-    // Check state before drawing
-    console.log('🔍 Before drawing - paths in mainGroup:', mainGroup.selectAll('path').size())
-    console.log('🔍 Before drawing - paths in SVG:', svg.selectAll('path').size())
-    
-    // Generate path data manually to debug
+    // Generate path data
     const pathData = line(validData)
-    console.log('🔍 Generated path data length:', pathData?.length || 0)
-    console.log('🔍 Path data preview (first 150 chars):', pathData?.substring(0, 150) + '...')
-    
-    // Count how many "M" (moveTo) commands are in the path
-    const moveToCount = (pathData?.match(/M/g) || []).length
-    console.log('🔍 MoveTo commands in path:', moveToCount)
-    
-    // Check for patterns that might indicate duplication
-    if (pathData && pathData.length > 300) {
-      const firstPart = pathData.substring(0, 150)
-      const restOfPath = pathData.substring(150)
-      if (restOfPath.includes(firstPart.substring(1, 50))) { // Skip 'M' command
-        console.log('🚨 FOUND DUPLICATE PATTERN IN PATH DATA!')
-        console.log('🚨 First part:', firstPart)
-        const duplicateIndex = restOfPath.indexOf(firstPart.substring(1, 50))
-        console.log('🚨 Duplicate starts at position:', 150 + duplicateIndex)
-      }
-    }
 
     const pathElement = mainGroup
       .append('path')
@@ -363,82 +278,8 @@ export const Waveform: React.FC<WaveformProps> = ({
       .attr('stroke-width', 1.5)
       .attr('d', pathData)
     
-    // Check state after drawing
-    console.log('📈 After drawing - paths in mainGroup:', mainGroup.selectAll('path').size())
-    console.log('📈 After drawing - paths in SVG:', svg.selectAll('path').size())
-    console.log('📈 Single path drawn with', validData.length, 'points')
-    
-    // Verify the path element was actually created
-    const createdPath = pathElement.node()
-    if (createdPath) {
-      console.log('📈 Created path element:', {
-        tag: createdPath.tagName,
-        class: createdPath.className.baseVal,
-        stroke: createdPath.getAttribute('stroke'),
-        parent: createdPath.parentElement?.tagName
-      })
-    } else {
-      console.error('❌ Failed to create path element!')
-    }
-    
-    // Check DOM paths across all SVGs
-    const allPaths = document.querySelectorAll('path')
-    const allWaveformPaths = document.querySelectorAll('path[class*="waveform"]')
-    console.log('🔍 Total path elements in entire document:', allPaths.length)
-    console.log('🔍 Total waveform path elements in document:', allWaveformPaths.length)
-    
-    // Log the current SVG's content in detail
-    console.log('📝 Current SVG innerHTML length:', svgRef.current.innerHTML.length)
-    console.log('📝 Current SVG content (first 200 chars):', svgRef.current.innerHTML.substring(0, 200) + '...')
-    
-    // Count all elements within the SVG
-    const allElementsInSvg = svgRef.current.querySelectorAll('*')
-    const allPathsInSvg = svgRef.current.querySelectorAll('path')
-    const allGroupsInSvg = svgRef.current.querySelectorAll('g')
-    const allLinesInSvg = svgRef.current.querySelectorAll('line')
-    
-    console.log('🔬 Elements in this SVG:')
-    console.log('  - Total elements:', allElementsInSvg.length)
-    console.log('  - Path elements:', allPathsInSvg.length)
-    console.log('  - Group elements:', allGroupsInSvg.length) 
-    console.log('  - Line elements:', allLinesInSvg.length)
-    
-    // Log each path element details
-    allPathsInSvg.forEach((path, index) => {
-      console.log(`  📍 Path ${index + 1}:`, {
-        class: path.className.baseVal,
-        stroke: path.getAttribute('stroke'),
-        strokeWidth: path.getAttribute('stroke-width'),
-        fill: path.getAttribute('fill'),
-        dLength: path.getAttribute('d')?.length || 0
-      })
-    })
-    
-    // Log each line element details
-    allLinesInSvg.forEach((line, index) => {
-      console.log(`  📏 Line ${index + 1}:`, {
-        class: line.className.baseVal,
-        stroke: line.getAttribute('stroke'),
-        strokeWidth: line.getAttribute('stroke-width'),
-        x1: line.getAttribute('x1'),
-        y1: line.getAttribute('y1'),
-        x2: line.getAttribute('x2'),
-        y2: line.getAttribute('y2')
-      })
-    })
-    
-    // Store SVG reference globally for debugging
-    if (typeof window !== 'undefined') {
-      (window as any).debugWaveformSVG = svgRef.current
-      console.log('🔧 SVG stored in window.debugWaveformSVG for inspection')
-      console.log('🔧 Run in console: window.debugWaveformSVG.innerHTML')
-    }
 
-    // Add zero line (temporarily disabled for debugging)
-    console.log('🟢 Zero line Y position:', yScale(0), 'innerHeight:', innerHeight)
-    
-    // TEMPORARILY COMMENT OUT zero line to test if it's causing the 2nd line
-    /*
+    // Add zero line
     mainGroup
       .append('line')
       .attr('class', 'zero-line')
@@ -450,7 +291,6 @@ export const Waveform: React.FC<WaveformProps> = ({
       .attr('stroke-width', 1)
       .attr('stroke-dasharray', '3,3')
       .attr('opacity', 0.5)
-    */
 
       setIsLoading(false)
     } catch (err) {
