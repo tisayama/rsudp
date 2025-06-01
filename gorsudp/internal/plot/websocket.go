@@ -13,8 +13,8 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true // Allow connections from any origin in development
 	},
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
+	ReadBufferSize:  8192,  // Increased from 1024
+	WriteBufferSize: 8192,  // Increased from 1024
 }
 
 // NewWebSocketManager creates a new WebSocket manager
@@ -23,7 +23,7 @@ func NewWebSocketManager() *WebSocketManager {
 		clients:    make(map[*Client]bool),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
-		broadcast:  make(chan WebSocketMessage, 256),
+		broadcast:  make(chan WebSocketMessage, 1024), // Increased from 256
 		stop:       make(chan struct{}),
 		stopped:    false,
 	}
@@ -132,7 +132,7 @@ func (manager *WebSocketManager) Broadcast(message WebSocketMessage) {
 	select {
 	case manager.broadcast <- message:
 	default:
-		log.Println("Warning: WebSocket broadcast channel full, dropping message")
+		log.Printf("⚠️ WebSocket broadcast channel full, dropping message of type: %s", message.Type)
 	}
 }
 
@@ -158,7 +158,7 @@ func (manager *WebSocketManager) HandleWebSocket(w http.ResponseWriter, r *http.
 	
 	client := &Client{
 		conn:     conn,
-		send:     make(chan WebSocketMessage, 256),
+		send:     make(chan WebSocketMessage, 512), // Increased from 256
 		channels: channels,
 	}
 
@@ -186,7 +186,7 @@ func parseChannelFilters(r *http.Request) []string {
 
 // writePump pumps messages from the hub to the websocket connection
 func (c *Client) writePump(manager *WebSocketManager) {
-	ticker := time.NewTicker(54 * time.Second) // Send ping every 54 seconds
+	ticker := time.NewTicker(30 * time.Second) // Send ping every 30 seconds
 	defer func() {
 		ticker.Stop()
 		c.conn.Close()
@@ -201,6 +201,7 @@ func (c *Client) writePump(manager *WebSocketManager) {
 				return
 			}
 
+			c.conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
 			err := c.conn.WriteJSON(message)
 			if err != nil {
 				log.Printf("🔥 WebSocket write error to %s: %v", c.conn.RemoteAddr(), err)
@@ -208,11 +209,12 @@ func (c *Client) writePump(manager *WebSocketManager) {
 			}
 		
 		case <-ticker.C:
-			c.conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+			c.conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				log.Printf("🏓 WebSocket ping error to %s: %v", c.conn.RemoteAddr(), err)
 				return
 			}
+			log.Printf("🏓 Sent ping to %s", c.conn.RemoteAddr())
 		}
 	}
 }
@@ -225,9 +227,10 @@ func (c *Client) readPump(manager *WebSocketManager) {
 	}()
 
 	// Set read deadline and pong handler
-	c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+	c.conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 	c.conn.SetPongHandler(func(string) error {
-		c.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		log.Printf("🏓 Received pong from %s", c.conn.RemoteAddr())
+		c.conn.SetReadDeadline(time.Now().Add(90 * time.Second))
 		return nil
 	})
 
