@@ -41,7 +41,7 @@ export const Waveform: React.FC<WaveformProps> = ({
 }) => {
   const svgRef = useRef<SVGSVGElement>(null)
   const [scales, setScales] = useState<{
-    x: d3.ScaleTime<number, number>
+    x: d3.ScaleLinear<number, number>
     y: d3.ScaleLinear<number, number>
   } | null>(null)
   const [isLoading, setIsLoading] = useState(false)
@@ -301,7 +301,7 @@ export const Waveform: React.FC<WaveformProps> = ({
       renderingRef.current = false
       console.log('🔓 Render complete, guard cleared')
     }
-  }, [data, width, height, timeWindow, showGrid, autoScale, units])
+  }, [data, width, height, timeWindow, showGrid, autoScale, units, channel])
 
   if (error) {
     return (

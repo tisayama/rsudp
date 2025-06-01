@@ -199,7 +199,7 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
 
     // Calculate rectangle dimensions
     const timeStep = spectrogramData.length > 1 
-      ? (timeExtent[1] - timeExtent[0]) / (spectrogramData.length - 1) 
+      ? (timeDomain[1] - timeDomain[0]) / (spectrogramData.length - 1) 
       : 1000 // 1 second default
     const rectWidth = Math.max(2, (innerWidth / spectrogramData.length))
     
@@ -276,7 +276,7 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
       .style('fill', '#666')
       .text('Time')
 
-  }, [spectrogramData, width, height, frequencyRange, colorScale, showGrid])
+  }, [spectrogramData, width, height, frequencyRange, colorScale, showGrid, timeWindow])
 
   if (error) {
     return (
