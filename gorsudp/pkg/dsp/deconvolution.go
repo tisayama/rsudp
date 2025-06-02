@@ -9,11 +9,11 @@ import (
 type DeconvolutionType int
 
 const (
-	DeconvVelocity DeconvolutionType = iota // VEL - velocity (m/s)
-	DeconvAcceleration                      // ACC - acceleration (m/s²)
-	DeconvDisplacement                      // DISP - displacement (m)
-	DeconvGravity                           // GRAV - fraction of gravity (g)
-	DeconvChannel                           // CHAN - channel-specific
+	DeconvVelocity     DeconvolutionType = iota // VEL - velocity (m/s)
+	DeconvAcceleration                          // ACC - acceleration (m/s²)
+	DeconvDisplacement                          // DISP - displacement (m)
+	DeconvGravity                               // GRAV - fraction of gravity (g)
+	DeconvChannel                               // CHAN - channel-specific
 )
 
 func (d DeconvolutionType) String() string {
@@ -77,13 +77,13 @@ func GetUnits(deconvType DeconvolutionType) Units {
 
 // InstrumentResponse represents a simplified instrument response
 type InstrumentResponse struct {
-	Sensitivity   float64    `json:"sensitivity"`   // Overall sensitivity (counts/unit)
-	SampleRate    float64    `json:"sample_rate"`   // Sample rate (Hz)
-	Poles         []complex128 `json:"poles"`       // Complex poles
-	Zeros         []complex128 `json:"zeros"`       // Complex zeros
-	Gain          float64    `json:"gain"`          // Normalization gain
-	InputUnits    string     `json:"input_units"`   // Input units (e.g., "M/S")
-	OutputUnits   string     `json:"output_units"`  // Output units (e.g., "COUNTS")
+	Sensitivity float64      `json:"sensitivity"`  // Overall sensitivity (counts/unit)
+	SampleRate  float64      `json:"sample_rate"`  // Sample rate (Hz)
+	Poles       []complex128 `json:"poles"`        // Complex poles
+	Zeros       []complex128 `json:"zeros"`        // Complex zeros
+	Gain        float64      `json:"gain"`         // Normalization gain
+	InputUnits  string       `json:"input_units"`  // Input units (e.g., "M/S")
+	OutputUnits string       `json:"output_units"` // Output units (e.g., "COUNTS")
 }
 
 // Deconvolver performs instrument response removal
@@ -99,11 +99,11 @@ func NewDeconvolver(response InstrumentResponse, deconvType DeconvolutionType, s
 	if response.Sensitivity == 0 {
 		return nil, fmt.Errorf("instrument sensitivity cannot be zero")
 	}
-	
+
 	if sampleRate <= 0 {
 		return nil, fmt.Errorf("sample rate must be positive")
 	}
-	
+
 	return &Deconvolver{
 		response:     response,
 		deconvType:   deconvType,
@@ -120,7 +120,7 @@ func (d *Deconvolver) Deconvolve(data []float64) ([]float64, error) {
 		// Remove sensitivity to get base physical units
 		physicalData[i] = sample / d.response.Sensitivity
 	}
-	
+
 	// Apply unit conversion based on deconvolution type
 	return d.convertUnits(physicalData)
 }
@@ -128,20 +128,20 @@ func (d *Deconvolver) Deconvolve(data []float64) ([]float64, error) {
 // convertUnits converts data to the desired physical units
 func (d *Deconvolver) convertUnits(data []float64) ([]float64, error) {
 	result := make([]float64, len(data))
-	
+
 	switch d.deconvType {
 	case DeconvVelocity:
 		// Already in velocity units for geophone data
 		copy(result, data)
-		
+
 	case DeconvAcceleration:
 		// Convert velocity to acceleration (differentiation)
 		result = d.differentiate(data)
-		
+
 	case DeconvDisplacement:
 		// Convert velocity to displacement (integration)
 		result = d.integrate(data)
-		
+
 	case DeconvGravity:
 		// Convert to fraction of earth gravity
 		// Assume input is acceleration in m/s²
@@ -149,15 +149,15 @@ func (d *Deconvolver) convertUnits(data []float64) ([]float64, error) {
 		for i, sample := range accelData {
 			result[i] = sample / d.earthGravity
 		}
-		
+
 	case DeconvChannel:
 		// Keep original units (no conversion)
 		copy(result, data)
-		
+
 	default:
 		return nil, fmt.Errorf("unsupported deconvolution type: %v", d.deconvType)
 	}
-	
+
 	return result, nil
 }
 
@@ -166,21 +166,21 @@ func (d *Deconvolver) differentiate(data []float64) []float64 {
 	if len(data) < 2 {
 		return data
 	}
-	
+
 	result := make([]float64, len(data))
 	dt := 1.0 / d.sampleRate
-	
+
 	// Forward difference for first point
 	result[0] = (data[1] - data[0]) / dt
-	
+
 	// Central difference for middle points
 	for i := 1; i < len(data)-1; i++ {
 		result[i] = (data[i+1] - data[i-1]) / (2 * dt)
 	}
-	
+
 	// Backward difference for last point
 	result[len(data)-1] = (data[len(data)-1] - data[len(data)-2]) / dt
-	
+
 	return result
 }
 
@@ -189,23 +189,23 @@ func (d *Deconvolver) integrate(data []float64) []float64 {
 	if len(data) == 0 {
 		return data
 	}
-	
+
 	result := make([]float64, len(data))
 	dt := 1.0 / d.sampleRate
-	
+
 	result[0] = 0 // Initial condition
-	
+
 	// Trapezoidal integration
 	for i := 1; i < len(data); i++ {
 		result[i] = result[i-1] + (data[i-1]+data[i])*dt/2
 	}
-	
+
 	// Remove DC component (high-pass filter effect)
 	mean := d.calculateMean(result)
 	for i := range result {
 		result[i] -= mean
 	}
-	
+
 	return result
 }
 
@@ -214,7 +214,7 @@ func (d *Deconvolver) calculateMean(data []float64) float64 {
 	if len(data) == 0 {
 		return 0
 	}
-	
+
 	sum := 0.0
 	for _, v := range data {
 		sum += v
@@ -224,10 +224,10 @@ func (d *Deconvolver) calculateMean(data []float64) float64 {
 
 // SimpleDeconvolver provides simplified deconvolution without full response
 type SimpleDeconvolver struct {
-	sensitivity  float64
-	deconvType   DeconvolutionType
-	sampleRate   float64
-	channelType  string // Channel type for channel-specific conversion
+	sensitivity float64
+	deconvType  DeconvolutionType
+	sampleRate  float64
+	channelType string // Channel type for channel-specific conversion
 }
 
 // NewSimpleDeconvolver creates a simplified deconvolver
@@ -235,11 +235,11 @@ func NewSimpleDeconvolver(sensitivity float64, deconvType DeconvolutionType, sam
 	if sensitivity == 0 {
 		return nil, fmt.Errorf("sensitivity cannot be zero")
 	}
-	
+
 	if sampleRate <= 0 {
 		return nil, fmt.Errorf("sample rate must be positive")
 	}
-	
+
 	return &SimpleDeconvolver{
 		sensitivity: sensitivity,
 		deconvType:  deconvType,
@@ -251,27 +251,27 @@ func NewSimpleDeconvolver(sensitivity float64, deconvType DeconvolutionType, sam
 // Deconvolve performs simplified deconvolution
 func (s *SimpleDeconvolver) Deconvolve(data []float64) ([]float64, error) {
 	result := make([]float64, len(data))
-	
+
 	switch s.deconvType {
 	case DeconvVelocity:
 		// Convert counts to velocity (typical for geophone channels)
 		for i, sample := range data {
 			result[i] = sample / s.sensitivity
 		}
-		
+
 	case DeconvAcceleration:
 		// Convert counts to acceleration (typical for accelerometer channels)
 		for i, sample := range data {
 			result[i] = sample / s.sensitivity
 		}
-		
+
 	case DeconvGravity:
 		// Convert counts to fraction of gravity
 		for i, sample := range data {
 			accel := sample / s.sensitivity
 			result[i] = accel / 9.81
 		}
-		
+
 	case DeconvDisplacement:
 		// Convert to displacement (requires integration from velocity)
 		velocity := make([]float64, len(data))
@@ -279,22 +279,22 @@ func (s *SimpleDeconvolver) Deconvolve(data []float64) ([]float64, error) {
 			velocity[i] = sample / s.sensitivity
 		}
 		result = s.integrate(velocity)
-		
+
 	case DeconvChannel:
 		// Channel-specific conversion
 		result = s.channelSpecificConversion(data)
-		
+
 	default:
 		return nil, fmt.Errorf("unsupported deconvolution type: %v", s.deconvType)
 	}
-	
+
 	return result, nil
 }
 
 // channelSpecificConversion applies channel-specific unit conversion
 func (s *SimpleDeconvolver) channelSpecificConversion(data []float64) []float64 {
 	result := make([]float64, len(data))
-	
+
 	// Determine appropriate conversion based on channel type
 	switch {
 	case containsString(s.channelType, []string{"EHZ", "EHN", "EHE", "SHZ", "SHN", "SHE"}):
@@ -302,24 +302,24 @@ func (s *SimpleDeconvolver) channelSpecificConversion(data []float64) []float64 
 		for i, sample := range data {
 			result[i] = sample / s.sensitivity
 		}
-		
+
 	case containsString(s.channelType, []string{"ENZ", "ENN", "ENE"}):
 		// Accelerometer channels - convert to acceleration
 		for i, sample := range data {
 			result[i] = sample / s.sensitivity
 		}
-		
+
 	case containsString(s.channelType, []string{"HDF"}):
 		// Pressure channels - keep as pressure units
 		for i, sample := range data {
 			result[i] = sample / s.sensitivity
 		}
-		
+
 	default:
 		// Unknown channel type - keep as counts
 		copy(result, data)
 	}
-	
+
 	return result
 }
 
@@ -328,26 +328,26 @@ func (s *SimpleDeconvolver) integrate(data []float64) []float64 {
 	if len(data) == 0 {
 		return data
 	}
-	
+
 	result := make([]float64, len(data))
 	dt := 1.0 / s.sampleRate
-	
+
 	result[0] = 0
 	for i := 1; i < len(data); i++ {
 		result[i] = result[i-1] + (data[i-1]+data[i])*dt/2
 	}
-	
+
 	// Remove DC component
 	mean := 0.0
 	for _, v := range result {
 		mean += v
 	}
 	mean /= float64(len(result))
-	
+
 	for i := range result {
 		result[i] -= mean
 	}
-	
+
 	return result
 }
 
@@ -367,34 +367,34 @@ func DefaultRaspberryShakeResponse(channelType string, sampleRate float64) Instr
 	sensitivity := 1.0
 	inputUnits := "COUNTS"
 	outputUnits := "COUNTS"
-	
+
 	switch {
 	case containsString(channelType, []string{"EHZ", "EHN", "EHE", "SHZ", "SHN", "SHE"}):
 		// Geophone channels (velocity)
 		sensitivity = 1.0e6 // Typical sensitivity for geophones
 		inputUnits = "M/S"
 		outputUnits = "COUNTS"
-		
+
 	case containsString(channelType, []string{"ENZ", "ENN", "ENE"}):
 		// Accelerometer channels
 		sensitivity = 1.0e8 // Typical sensitivity for accelerometers
 		inputUnits = "M/S**2"
 		outputUnits = "COUNTS"
-		
+
 	case containsString(channelType, []string{"HDF"}):
 		// Pressure channels
 		sensitivity = 1.0e5 // Typical sensitivity for pressure sensors
 		inputUnits = "PA"
 		outputUnits = "COUNTS"
 	}
-	
+
 	return InstrumentResponse{
-		Sensitivity:  sensitivity,
-		SampleRate:   sampleRate,
-		Poles:        []complex128{}, // Simplified - no poles/zeros
-		Zeros:        []complex128{},
-		Gain:         1.0,
-		InputUnits:   inputUnits,
-		OutputUnits:  outputUnits,
+		Sensitivity: sensitivity,
+		SampleRate:  sampleRate,
+		Poles:       []complex128{}, // Simplified - no poles/zeros
+		Zeros:       []complex128{},
+		Gain:        1.0,
+		InputUnits:  inputUnits,
+		OutputUnits: outputUnits,
 	}
 }

@@ -13,8 +13,8 @@ var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true // Allow connections from any origin in development
 	},
-	ReadBufferSize:  8192,  // Increased from 1024
-	WriteBufferSize: 8192,  // Increased from 1024
+	ReadBufferSize:  8192, // Increased from 1024
+	WriteBufferSize: 8192, // Increased from 1024
 }
 
 // NewWebSocketManager creates a new WebSocket manager
@@ -40,10 +40,10 @@ func (manager *WebSocketManager) Stop() {
 		return
 	}
 	manager.stopped = true
-	
+
 	// Signal the run loop to stop
 	close(manager.stop)
-	
+
 	// Close all client connections
 	for client := range manager.clients {
 		client.conn.Close()
@@ -61,12 +61,12 @@ func (manager *WebSocketManager) run() {
 		case client := <-manager.register:
 			manager.clients[client] = true
 			log.Printf("WebSocket client registered. Total clients: %d", len(manager.clients))
-			
+
 			// Send welcome message with current configuration
 			welcomeMsg := WebSocketMessage{
 				Type: MessageTypeConfig,
 				Data: map[string]interface{}{
-					"status": "connected",
+					"status":    "connected",
 					"client_id": len(manager.clients),
 				},
 			}
@@ -144,7 +144,7 @@ func (manager *WebSocketManager) GetClientCount() int {
 // HandleWebSocket handles WebSocket upgrade requests
 func (manager *WebSocketManager) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	log.Printf("🔌 WebSocket upgrade request from %s (User-Agent: %s)", r.RemoteAddr, r.UserAgent())
-	
+
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Printf("❌ WebSocket upgrade error from %s: %v", r.RemoteAddr, err)
@@ -155,7 +155,7 @@ func (manager *WebSocketManager) HandleWebSocket(w http.ResponseWriter, r *http.
 
 	// Parse channel filters from query parameters
 	channels := parseChannelFilters(r)
-	
+
 	client := &Client{
 		conn:     conn,
 		send:     make(chan WebSocketMessage, 512), // Increased from 256
@@ -175,12 +175,12 @@ func parseChannelFilters(r *http.Request) []string {
 	if channelsParam == "" {
 		return []string{"all"}
 	}
-	
+
 	channels := strings.Split(channelsParam, ",")
 	for i, channel := range channels {
 		channels[i] = strings.TrimSpace(channel)
 	}
-	
+
 	return channels
 }
 
@@ -207,7 +207,7 @@ func (c *Client) writePump(manager *WebSocketManager) {
 				log.Printf("🔥 WebSocket write error to %s: %v", c.conn.RemoteAddr(), err)
 				return
 			}
-		
+
 		case <-ticker.C:
 			c.conn.SetWriteDeadline(time.Now().Add(30 * time.Second))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {

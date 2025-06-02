@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"sync"
+
 	"github.com/tisayama/gorsudp/internal/broker"
 	"github.com/tisayama/gorsudp/internal/screenshot"
 	"github.com/tisayama/gorsudp/pkg/config"
@@ -14,12 +16,18 @@ import (
 
 // PlotConsumer processes events for the plotting system
 type PlotConsumer struct {
-	id               string
-	config           config.Plot
-	plotServer       *PlotServer
-	stream           *stream.Stream
-	channelFilter    []string
-	screenshotMgr    *screenshot.ScreenshotManager
+	id            string
+	config        config.Plot
+	plotServer    *PlotServer
+	stream        *stream.Stream
+	channelFilter []string
+	screenshotMgr *screenshot.ScreenshotManager
+
+	// Data buffering
+	dataBuffer      []PlotData
+	dataBufferMutex sync.Mutex
+	bufferTicker    *time.Ticker
+	bufferStopChan  chan bool
 }
 
 // NewPlotConsumer creates a new plot consumer
@@ -66,11 +74,13 @@ func NewPlotConsumer(cfg config.Plot) (*PlotConsumer, error) {
 	}
 
 	consumer := &PlotConsumer{
-		id:            "plot",
-		config:        cfg,
-		plotServer:    NewPlotServer(plotConfig),
-		stream:        stream.NewStream(),
-		channelFilter: cfg.Channels,
+		id:             "plot",
+		config:         cfg,
+		plotServer:     NewPlotServer(plotConfig),
+		stream:         stream.NewStream(),
+		channelFilter:  cfg.Channels,
+		dataBuffer:     make([]PlotData, 0, 100), // Pre-allocate buffer
+		bufferStopChan: make(chan bool),
 	}
 
 	// Initialize screenshot manager if eq_screenshots is enabled
@@ -86,37 +96,50 @@ func NewPlotConsumer(cfg config.Plot) (*PlotConsumer, error) {
 // Start starts the plot consumer
 func (c *PlotConsumer) Start() error {
 	log.Println("Starting plot consumer...")
-	
+
 	// Start plot server first
 	if err := c.plotServer.Start(); err != nil {
 		return err
 	}
-	
+
+	// Buffer flush ticker disabled temporarily for debugging
+	// c.bufferTicker = time.NewTicker(50 * time.Millisecond)
+	// go c.bufferFlushLoop()
+
 	// Start screenshot manager if enabled
 	if c.screenshotMgr != nil {
 		// Wait a moment for the web server to be ready
 		time.Sleep(2 * time.Second)
-		
+
 		if err := c.screenshotMgr.Start(); err != nil {
 			log.Printf("Warning: Screenshot manager failed to start: %v", err)
 			// Don't fail the entire consumer if screenshots fail
 		}
 	}
-	
+
 	return nil
 }
 
 // Stop stops the plot consumer
 func (c *PlotConsumer) Stop() error {
 	log.Println("Stopping plot consumer...")
-	
+
+	// Buffer flush ticker disabled temporarily for debugging
+	// if c.bufferTicker != nil {
+	// 	c.bufferTicker.Stop()
+	// 	c.bufferStopChan <- true
+	// }
+	//
+	// // Flush any remaining buffered data
+	// c.flushBuffer()
+
 	// Stop screenshot manager first
 	if c.screenshotMgr != nil {
 		if err := c.screenshotMgr.Stop(); err != nil {
 			log.Printf("Warning: Failed to stop screenshot manager: %v", err)
 		}
 	}
-	
+
 	return c.plotServer.Stop()
 }
 
@@ -155,7 +178,7 @@ func (c *PlotConsumer) processData(event broker.Event) error {
 	}
 
 	packet := dataEvent.Packet
-	
+
 	// Check if we should process this channel
 	if !c.shouldProcessChannel(packet.Channel) {
 		return nil
@@ -175,14 +198,14 @@ func (c *PlotConsumer) processData(event broker.Event) error {
 
 	// Calculate individual timestamps for each sample
 	// Round base timestamp to nearest millisecond to avoid JavaScript precision issues
-	baseTimestampNanos := int64(packet.GetTimestamp()*1e9)
+	baseTimestampNanos := int64(packet.GetTimestamp() * 1e9)
 	// Round to nearest millisecond (1e6 nanoseconds)
 	baseTimestampMillis := (baseTimestampNanos + 5e5) / 1e6 * 1e6
 	baseTimestamp := time.Unix(0, baseTimestampMillis)
-	
-	sampleRate := 100.0 // TODO: Get from packet or config
+
+	sampleRate := 100.0                               // TODO: Get from packet or config
 	sampleInterval := time.Duration(1e9 / sampleRate) // nanoseconds per sample (10ms)
-	
+
 	sampleTimestamps := make([]time.Time, len(samples))
 	for i := range samples {
 		// Each sample timestamp is exactly 10ms apart
@@ -199,8 +222,18 @@ func (c *PlotConsumer) processData(event broker.Event) error {
 		SampleTimestamps: sampleTimestamps,
 	}
 
-	// Send to plot server
+	// Send directly to plot server (reverted from buffering)
 	c.plotServer.AddPlotData(plotData)
+
+	// Buffering disabled temporarily for debugging
+	// c.dataBufferMutex.Lock()
+	// c.dataBuffer = append(c.dataBuffer, plotData)
+	//
+	// // Flush if buffer is getting large
+	// if len(c.dataBuffer) >= 10 {
+	// 	c.flushBufferLocked()
+	// }
+	// c.dataBufferMutex.Unlock()
 
 	return nil
 }
@@ -230,7 +263,7 @@ func (c *PlotConsumer) processAlarm(event broker.Event) error {
 		go c.takeEarthquakeScreenshot(alarmEvent)
 	}
 
-	log.Printf("Plot system: Alert sent for channel %s (STA/LTA: %.2f)", 
+	log.Printf("Plot system: Alert sent for channel %s (STA/LTA: %.2f)",
 		alarmEvent.Channel, alarmEvent.Ratio)
 
 	return nil
@@ -240,14 +273,14 @@ func (c *PlotConsumer) processAlarm(event broker.Event) error {
 func (c *PlotConsumer) takeEarthquakeScreenshot(alarmEvent broker.AlarmEvent) {
 	// Wait a moment for the plot to update with alert information
 	time.Sleep(2 * time.Second)
-	
+
 	// Generate filename with timestamp and channel
 	timestamp := alarmEvent.EventTime.Format("20060102_150405")
-	filename := fmt.Sprintf("earthquake_%s_%s_%.2f.png", 
+	filename := fmt.Sprintf("earthquake_%s_%s_%.2f.png",
 		timestamp, alarmEvent.Channel, alarmEvent.Ratio)
-	
+
 	log.Printf("Taking earthquake screenshot: %s", filename)
-	
+
 	if err := c.screenshotMgr.TakeScreenshot(filename); err != nil {
 		log.Printf("Failed to take earthquake screenshot: %v", err)
 	} else {
@@ -277,7 +310,7 @@ func (c *PlotConsumer) processReset(event broker.Event) error {
 		Type: MessageTypeReset,
 		Data: alertMsg,
 	}
-	
+
 	c.plotServer.wsManager.Broadcast(message)
 
 	log.Printf("Plot system: Reset notification sent for channel %s", resetEvent.Channel)
@@ -288,7 +321,7 @@ func (c *PlotConsumer) processReset(event broker.Event) error {
 // processTerm processes termination events
 func (c *PlotConsumer) processTerm(event broker.Event) error {
 	log.Println("Plot consumer received termination signal")
-	
+
 	// Send system shutdown message to connected clients
 	message := WebSocketMessage{
 		Type: MessageTypeSystemStatus,
@@ -298,12 +331,12 @@ func (c *PlotConsumer) processTerm(event broker.Event) error {
 			"message":   "System is shutting down",
 		},
 	}
-	
+
 	c.plotServer.wsManager.Broadcast(message)
-	
+
 	// Give clients time to receive the message
 	time.Sleep(1 * time.Second)
-	
+
 	return nil
 }
 
@@ -346,7 +379,7 @@ func (c *PlotConsumer) getUnits(channel string) string {
 		switch channel[1] {
 		case 'H': // High gain seismometer (velocity)
 			return "m/s"
-		case 'L': // Low gain seismometer (velocity)  
+		case 'L': // Low gain seismometer (velocity)
 			return "m/s"
 		case 'B': // Broadband seismometer (velocity)
 			return "m/s"
@@ -360,4 +393,44 @@ func (c *PlotConsumer) getUnits(channel string) string {
 	}
 
 	return "counts"
+}
+
+// bufferFlushLoop periodically flushes buffered data
+func (c *PlotConsumer) bufferFlushLoop() {
+	for {
+		select {
+		case <-c.bufferTicker.C:
+			c.flushBuffer()
+		case <-c.bufferStopChan:
+			return
+		}
+	}
+}
+
+// flushBuffer sends all buffered data to the plot server
+func (c *PlotConsumer) flushBuffer() {
+	c.dataBufferMutex.Lock()
+	defer c.dataBufferMutex.Unlock()
+
+	c.flushBufferLocked()
+}
+
+// flushBufferLocked sends buffered data (must be called with mutex locked)
+func (c *PlotConsumer) flushBufferLocked() {
+	if len(c.dataBuffer) == 0 {
+		return
+	}
+
+	// Send all buffered data
+	for _, data := range c.dataBuffer {
+		c.plotServer.AddPlotData(data)
+	}
+
+	// Clear buffer
+	c.dataBuffer = c.dataBuffer[:0]
+}
+
+// GetPlotServer returns the plot server instance
+func (c *PlotConsumer) GetPlotServer() *PlotServer {
+	return c.plotServer
 }

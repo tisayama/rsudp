@@ -15,15 +15,15 @@ type NotificationProvider interface {
 
 // NotificationJob represents a notification task
 type NotificationJob struct {
-	ID          string                 `json:"id"`
-	Type        NotificationType       `json:"type"`
-	Provider    string                 `json:"provider"`
-	Message     string                 `json:"message"`
-	ImagePath   string                 `json:"image_path,omitempty"`
-	Timestamp   time.Time              `json:"timestamp"`
-	Retry       int                    `json:"retry"`
-	MaxRetries  int                    `json:"max_retries"`
-	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	ID         string                 `json:"id"`
+	Type       NotificationType       `json:"type"`
+	Provider   string                 `json:"provider"`
+	Message    string                 `json:"message"`
+	ImagePath  string                 `json:"image_path,omitempty"`
+	Timestamp  time.Time              `json:"timestamp"`
+	Retry      int                    `json:"retry"`
+	MaxRetries int                    `json:"max_retries"`
+	Metadata   map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // NotificationType represents the type of notification
@@ -53,11 +53,11 @@ func (nt NotificationType) String() string {
 
 // NotificationResult represents the result of a notification attempt
 type NotificationResult struct {
-	JobID     string    `json:"job_id"`
-	Provider  string    `json:"provider"`
-	Success   bool      `json:"success"`
-	Error     string    `json:"error,omitempty"`
-	Timestamp time.Time `json:"timestamp"`
+	JobID     string        `json:"job_id"`
+	Provider  string        `json:"provider"`
+	Success   bool          `json:"success"`
+	Error     string        `json:"error,omitempty"`
+	Timestamp time.Time     `json:"timestamp"`
 	Duration  time.Duration `json:"duration"`
 }
 
@@ -71,12 +71,12 @@ type RateLimit struct {
 
 // NotificationConfig represents configuration for notification system
 type NotificationConfig struct {
-	Enabled     bool      `json:"enabled"`
-	Workers     int       `json:"workers"`
-	QueueSize   int       `json:"queue_size"`
-	RetryDelay  time.Duration `json:"retry_delay"`
-	MaxRetries  int       `json:"max_retries"`
-	Timeout     time.Duration `json:"timeout"`
+	Enabled    bool          `json:"enabled"`
+	Workers    int           `json:"workers"`
+	QueueSize  int           `json:"queue_size"`
+	RetryDelay time.Duration `json:"retry_delay"`
+	MaxRetries int           `json:"max_retries"`
+	Timeout    time.Duration `json:"timeout"`
 }
 
 // Alert represents an earthquake alert for notifications

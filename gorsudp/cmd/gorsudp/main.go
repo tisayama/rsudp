@@ -53,11 +53,11 @@ func main() {
 		if *configFile != "" {
 			configPath = *configFile
 		}
-		
+
 		if err := config.CreateDefaultConfig(configPath); err != nil {
 			log.Fatalf("Failed to create default config: %v", err)
 		}
-		
+
 		fmt.Printf("Default configuration created at: %s\n", configPath)
 		os.Exit(0)
 	}
@@ -66,7 +66,7 @@ func main() {
 	configPath := *configFile
 	if configPath == "" {
 		configPath = config.GetDefaultConfigPath()
-		
+
 		// If default config doesn't exist, create it
 		if _, err := os.Stat(configPath); os.IsNotExist(err) {
 			fmt.Printf("Creating default configuration at: %s\n", configPath)
@@ -128,7 +128,7 @@ func main() {
 	if err := app.Start(ctx); err != nil {
 		log.Fatalf("Failed to start application: %v", err)
 	}
-	
+
 	// Start metrics reporting
 	go app.startMetricsReporting(ctx)
 
@@ -163,17 +163,17 @@ func main() {
 
 // Application represents the main application
 type Application struct {
-	config               *config.Config
-	broker               *broker.MessageBroker
-	producer             *producer.UDPProducer
-	stream               *stream.Stream
-	alertConsumer        *alert.AlertConsumer
-	plotConsumer         *plot.PlotConsumer
-	notifyConsumer       *notify.NotificationConsumer
-	writerConsumer       *writer.WriterConsumer
-	screenshotConsumer   *screenshot.ScreenshotConsumer
-	healthChecker        *monitoring.HealthChecker
-	startTime            time.Time
+	config             *config.Config
+	broker             *broker.MessageBroker
+	producer           *producer.UDPProducer
+	stream             *stream.Stream
+	alertConsumer      *alert.AlertConsumer
+	plotConsumer       *plot.PlotConsumer
+	notifyConsumer     *notify.NotificationConsumer
+	writerConsumer     *writer.WriterConsumer
+	screenshotConsumer *screenshot.ScreenshotConsumer
+	healthChecker      *monitoring.HealthChecker
+	startTime          time.Time
 }
 
 // NewApplication creates a new application instance
@@ -244,17 +244,44 @@ func (app *Application) Start(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to create plot consumer: %v", err)
 		}
-		
+
 		// Start the plot server
 		if err := app.plotConsumer.Start(); err != nil {
 			return fmt.Errorf("failed to start plot server: %v", err)
 		}
-		
+
 		if err := app.broker.RegisterConsumer(app.plotConsumer); err != nil {
 			return fmt.Errorf("failed to register plot consumer: %v", err)
 		}
-		log.Printf("Plot consumer registered successfully, web interface available at http://%s:%d", 
+		log.Printf("Plot consumer registered successfully, web interface available at http://%s:%d",
 			app.config.Plot.Host, app.config.Plot.Port)
+	}
+
+	// Connect AlertConsumer to PlotServer for STA/LTA data broadcasting
+	if app.config.Alert.Enabled && app.config.Plot.Enabled && app.alertConsumer != nil && app.plotConsumer != nil {
+		log.Println("Connecting alert consumer to plot server for STA/LTA data...")
+
+		// Get plot server reference
+		plotServer := app.plotConsumer.GetPlotServer()
+		if plotServer != nil {
+			// Set callback to send STA/LTA data to plot server
+			app.alertConsumer.SetSTALTACallback(func(timestamp time.Time, channel string, staValue, ltaValue, ratio, threshold, reset float64, triggered bool) {
+				stalTAData := plot.STALTAMessage{
+					Timestamp: timestamp,
+					Channel:   channel,
+					STAValue:  staValue,
+					LTAValue:  ltaValue,
+					Ratio:     ratio,
+					Threshold: threshold,
+					Reset:     reset,
+					Triggered: triggered,
+				}
+				plotServer.AddSTALTAData(stalTAData)
+			})
+			log.Println("STA/LTA data broadcasting to plot server enabled")
+		} else {
+			log.Println("Warning: Plot server not available for STA/LTA data broadcasting")
+		}
 	}
 
 	// Register notification consumer if any notification provider is enabled
@@ -262,12 +289,12 @@ func (app *Application) Start(ctx context.Context) error {
 	if err == nil {
 		log.Println("Creating notification consumer...")
 		app.notifyConsumer = notifyConsumer
-		
+
 		// Start the notification manager
 		if err := app.notifyConsumer.Start(); err != nil {
 			return fmt.Errorf("failed to start notification manager: %v", err)
 		}
-		
+
 		if err := app.broker.RegisterConsumer(app.notifyConsumer); err != nil {
 			return fmt.Errorf("failed to register notification consumer: %v", err)
 		}
@@ -402,9 +429,9 @@ func (app *Application) Stop() error {
 func (app *Application) startMetricsReporting(ctx context.Context) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
-	
+
 	var lastPacketsReceived int64
-	
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -414,8 +441,8 @@ func (app *Application) startMetricsReporting(ctx context.Context) {
 				metrics := app.producer.GetMetrics()
 				packetsThisPeriod := metrics.PacketsReceived - lastPacketsReceived
 				lastPacketsReceived = metrics.PacketsReceived
-				
-				log.Printf("UDP Metrics: %d packets received (+%d in last 10s), %d bytes, %d errors", 
+
+				log.Printf("UDP Metrics: %d packets received (+%d in last 10s), %d bytes, %d errors",
 					metrics.PacketsReceived, packetsThisPeriod, metrics.BytesReceived, metrics.Errors)
 			}
 		}
@@ -460,23 +487,23 @@ func (c *SimpleConsumer) ProcessEvent(event broker.Event) error {
 	case broker.EventData:
 		if dataEvent, ok := event.Data.(broker.DataEvent); ok {
 			packet := dataEvent.Packet
-			
+
 			// Update stream with packet data
 			err := c.stream.UpdateFromPacket(packet, "Z0000", "AM")
 			if err != nil {
 				return fmt.Errorf("failed to update stream: %v", err)
 			}
-			
+
 			// Log packet reception (only occasionally to avoid spam)
 			if packet.GetTimestamp() > 0 && int(packet.GetTimestamp())%10 == 0 {
-				log.Printf("Received %s packet: %d samples at %.3f", 
+				log.Printf("Received %s packet: %d samples at %.3f",
 					packet.Channel, len(packet.Data), packet.GetTimestamp())
 			}
-			
+
 			// Debug: Log every 40th packet for the first minute to verify reception rate
 			count := atomic.AddInt64(&c.packetCount, 1)
 			if time.Since(c.app.startTime) < time.Minute && count%40 == 0 {
-				log.Printf("DEBUG: Packet #%d - %s channel: %d samples", 
+				log.Printf("DEBUG: Packet #%d - %s channel: %d samples",
 					count, packet.Channel, len(packet.Data))
 			}
 		}
@@ -487,7 +514,7 @@ func (c *SimpleConsumer) ProcessEvent(event broker.Event) error {
 	case broker.EventTerm:
 		log.Printf("TERMINATION EVENT: %+v", event.Data)
 	}
-	
+
 	return nil
 }
 
@@ -495,15 +522,15 @@ func (c *SimpleConsumer) ProcessEvent(event broker.Event) error {
 func (app *Application) setupHealthChecks() {
 	// UDP port health check
 	app.healthChecker.RegisterCheck("udp_port", monitoring.CreateUDPPortCheck(app.config.Settings.Port))
-	
+
 	// Memory health check (512MB limit)
 	app.healthChecker.RegisterCheck("memory", monitoring.CreateMemoryCheck(512))
-	
+
 	// Data directory health check
 	if app.config.Write.Enabled {
 		app.healthChecker.RegisterCheck("data_directory", monitoring.CreateDiskSpaceCheck(app.config.Write.OutDir, 1))
 	}
-	
+
 	// Screenshot directory health check
 	if app.config.Plot.Enabled && app.config.Plot.EqScreenshots {
 		app.healthChecker.RegisterCheck("screenshot_directory", monitoring.CreateDiskSpaceCheck("./screenshots", 1))
@@ -523,7 +550,7 @@ func createDirectories(cfg *config.Config) error {
 		if dir == "" {
 			continue
 		}
-		
+
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return fmt.Errorf("failed to create directory %s: %v", dir, err)
 		}
@@ -562,7 +589,7 @@ func performHealthCheck(cfg *config.Config) int {
 
 	// Create health checker for validation
 	healthChecker := monitoring.NewHealthChecker()
-	
+
 	// Register basic health checks
 	healthChecker.RegisterCheck("udp_port", monitoring.CreateUDPPortCheck(cfg.Settings.Port))
 	healthChecker.RegisterCheck("memory", monitoring.CreateMemoryCheck(512))
@@ -573,7 +600,7 @@ func performHealthCheck(cfg *config.Config) int {
 	// Run health checks
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	
+
 	healthChecker.RunChecks(ctx)
 	health := healthChecker.GetHealth()
 

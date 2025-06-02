@@ -9,11 +9,11 @@ import (
 
 // PlotData represents data for plotting
 type PlotData struct {
-	Channel    string      `json:"channel"`
-	Timestamp  time.Time   `json:"timestamp"`  // Base timestamp (for backward compatibility)
-	Samples    []float64   `json:"samples"`    // Sample values
-	SampleRate float64     `json:"sample_rate"`
-	Units      string      `json:"units"`
+	Channel    string    `json:"channel"`
+	Timestamp  time.Time `json:"timestamp"` // Base timestamp (for backward compatibility)
+	Samples    []float64 `json:"samples"`   // Sample values
+	SampleRate float64   `json:"sample_rate"`
+	Units      string    `json:"units"`
 	// New field: individual timestamps for each sample point
 	SampleTimestamps []time.Time `json:"sample_timestamps,omitempty"`
 }
@@ -31,7 +31,7 @@ type SpectrogramData struct {
 type PlotConfig struct {
 	Enabled              bool     `json:"enabled"`
 	Channels             []string `json:"channels"`
-	Duration             int      `json:"duration"`        // seconds
+	Duration             int      `json:"duration"` // seconds
 	Spectrogram          bool     `json:"spectrogram"`
 	Fullscreen           bool     `json:"fullscreen"`
 	Kiosk                bool     `json:"kiosk"`
@@ -77,23 +77,24 @@ type WebSocketManager struct {
 
 // PlotMessage types
 const (
-	MessageTypePlotData       = "plot_data"
-	MessageTypeSpectrogram    = "spectrogram"
-	MessageTypeAlert          = "alert"
-	MessageTypeReset          = "reset"
-	MessageTypeConfig         = "config"
-	MessageTypeChannelList    = "channel_list"
-	MessageTypeSystemStatus   = "system_status"
+	MessageTypePlotData     = "plot_data"
+	MessageTypeSpectrogram  = "spectrogram"
+	MessageTypeAlert        = "alert"
+	MessageTypeReset        = "reset"
+	MessageTypeConfig       = "config"
+	MessageTypeChannelList  = "channel_list"
+	MessageTypeSystemStatus = "system_status"
+	MessageTypeSTALTAData   = "sta_lta_data"
 )
 
 // AlertMessage represents an alert event for the plot system
 type AlertMessage struct {
-	Channel    string    `json:"channel"`
-	Timestamp  time.Time `json:"timestamp"`
-	STALTARatio float64  `json:"stalta_ratio"`
-	Threshold  float64   `json:"threshold"`
-	Duration   float64   `json:"duration"`
-	Message    string    `json:"message"`
+	Channel     string    `json:"channel"`
+	Timestamp   time.Time `json:"timestamp"`
+	STALTARatio float64   `json:"stalta_ratio"`
+	Threshold   float64   `json:"threshold"`
+	Duration    float64   `json:"duration"`
+	Message     string    `json:"message"`
 }
 
 // SystemStatus represents system status information
@@ -104,4 +105,16 @@ type SystemStatus struct {
 	PacketsReceived int64     `json:"packets_received"`
 	AlertsTriggered int64     `json:"alerts_triggered"`
 	Uptime          string    `json:"uptime"`
+}
+
+// STALTAMessage represents STA/LTA data for real-time display
+type STALTAMessage struct {
+	Timestamp time.Time `json:"timestamp"`
+	Channel   string    `json:"channel"`
+	STAValue  float64   `json:"sta_value"`
+	LTAValue  float64   `json:"lta_value"`
+	Ratio     float64   `json:"ratio"`
+	Threshold float64   `json:"threshold"`
+	Reset     float64   `json:"reset"`
+	Triggered bool      `json:"triggered"`
 }

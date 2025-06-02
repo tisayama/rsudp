@@ -142,9 +142,9 @@ func TestTrace_Slice(t *testing.T) {
 	// Test slicing middle portion
 	sliceStart := startTime.Add(20 * time.Millisecond) // 2 samples in
 	sliceEnd := startTime.Add(70 * time.Millisecond)   // 7 samples in
-	
+
 	sliced := trace.Slice(sliceStart, sliceEnd)
-	
+
 	if sliced == nil {
 		t.Fatal("Slice returned nil")
 	}
@@ -158,7 +158,7 @@ func TestTrace_Slice(t *testing.T) {
 	// Test slicing outside range
 	futureStart := startTime.Add(1 * time.Hour)
 	futureEnd := startTime.Add(2 * time.Hour)
-	
+
 	emptySlice := trace.Slice(futureStart, futureEnd)
 	if emptySlice.NumSamples != 0 {
 		t.Errorf("Slice outside range should be empty, got %d samples", emptySlice.NumSamples)
@@ -444,7 +444,7 @@ func TestStream_Copy(t *testing.T) {
 	}
 
 	packet2 := &shakenet.UDPPacket{
-		Channel:   "EHN", 
+		Channel:   "EHN",
 		Timestamp: time.Now(),
 		Data:      []int32{300, 400},
 	}

@@ -35,11 +35,11 @@ type ButterworthFilter struct {
 	freqLow    float64 // Low cutoff frequency (Hz)
 	freqHigh   float64 // High cutoff frequency (Hz)
 	sampleRate float64 // Sample rate (Hz)
-	
+
 	// Filter coefficients
 	a []float64 // Denominator coefficients
 	b []float64 // Numerator coefficients
-	
+
 	// Filter state (delay line)
 	x []float64 // Input history
 	y []float64 // Output history
@@ -50,11 +50,11 @@ func NewButterworthFilter(filterType FilterType, order int, freqLow, freqHigh, s
 	if order <= 0 || order > 10 {
 		return nil, fmt.Errorf("filter order must be between 1 and 10")
 	}
-	
+
 	if sampleRate <= 0 {
 		return nil, fmt.Errorf("sample rate must be positive")
 	}
-	
+
 	// Validate frequencies
 	nyquist := sampleRate / 2
 	switch filterType {
@@ -71,7 +71,7 @@ func NewButterworthFilter(filterType FilterType, order int, freqLow, freqHigh, s
 			return nil, fmt.Errorf("bandpass frequencies must satisfy 0 < freqLow < freqHigh < %f Hz", nyquist)
 		}
 	}
-	
+
 	filter := &ButterworthFilter{
 		filterType: filterType,
 		order:      order,
@@ -79,16 +79,16 @@ func NewButterworthFilter(filterType FilterType, order int, freqLow, freqHigh, s
 		freqHigh:   freqHigh,
 		sampleRate: sampleRate,
 	}
-	
+
 	// Calculate filter coefficients
 	if err := filter.calculateCoefficients(); err != nil {
 		return nil, fmt.Errorf("failed to calculate filter coefficients: %v", err)
 	}
-	
+
 	// Initialize delay lines
 	filter.x = make([]float64, len(filter.b))
 	filter.y = make([]float64, len(filter.a))
-	
+
 	return filter, nil
 }
 
@@ -110,12 +110,12 @@ func (f *ButterworthFilter) calculateCoefficients() error {
 func (f *ButterworthFilter) calculateLowpassCoefficients() error {
 	// Normalized cutoff frequency (0 to 1, where 1 is Nyquist)
 	wc := f.freqHigh / (f.sampleRate / 2)
-	
+
 	// Ensure frequency is in valid range
 	if wc >= 1.0 {
 		wc = 0.99
 	}
-	
+
 	// Use bilinear transform with proper pre-warping
 	switch f.order {
 	case 1:
@@ -124,24 +124,24 @@ func (f *ButterworthFilter) calculateLowpassCoefficients() error {
 		c := math.Tan(math.Pi * wc / 2)
 		a1 := (1 - c) / (1 + c)
 		b0 := c / (1 + c)
-		
+
 		f.b = []float64{b0, b0}
 		f.a = []float64{1, a1}
-		
+
 	case 2:
 		// Second order lowpass Butterworth using more stable formulation
 		k := math.Tan(math.Pi * wc / 2)
 		norm := 1.0 / (1.0 + k*math.Sqrt2 + k*k)
-		
+
 		f.b = []float64{k * k * norm, 2.0 * k * k * norm, k * k * norm}
 		f.a = []float64{1, 2.0 * (k*k - 1.0) * norm, (1.0 - k*math.Sqrt2 + k*k) * norm}
-		
+
 	default:
 		// For higher orders, limit to 2nd order for stability
 		f.order = 2
 		return f.calculateLowpassCoefficients()
 	}
-	
+
 	return nil
 }
 
@@ -149,7 +149,7 @@ func (f *ButterworthFilter) calculateLowpassCoefficients() error {
 func (f *ButterworthFilter) calculateHighpassCoefficients() error {
 	// Normalized cutoff frequency
 	wc := f.freqLow / (f.sampleRate / 2)
-	
+
 	// Ensure frequency is in valid range
 	if wc >= 1.0 {
 		wc = 0.99
@@ -157,31 +157,31 @@ func (f *ButterworthFilter) calculateHighpassCoefficients() error {
 	if wc <= 0.0 {
 		wc = 0.01
 	}
-	
+
 	switch f.order {
 	case 1:
 		// First order highpass
 		c := math.Tan(math.Pi * wc / 2)
 		a1 := (1 - c) / (1 + c)
 		b0 := 1.0 / (1 + c)
-		
+
 		f.b = []float64{b0, -b0}
 		f.a = []float64{1, a1}
-		
+
 	case 2:
 		// Second order highpass Butterworth using more stable formulation
 		k := math.Tan(math.Pi * wc / 2)
 		norm := 1.0 / (1.0 + k*math.Sqrt2 + k*k)
-		
+
 		f.b = []float64{norm, -2.0 * norm, norm}
 		f.a = []float64{1, 2.0 * (k*k - 1.0) * norm, (1.0 - k*math.Sqrt2 + k*k) * norm}
-		
+
 	default:
 		// For higher orders, limit to 2nd order for stability
 		f.order = 2
 		return f.calculateHighpassCoefficients()
 	}
-	
+
 	return nil
 }
 
@@ -190,7 +190,7 @@ func (f *ButterworthFilter) calculateBandpassCoefficients() error {
 	// Normalized frequencies
 	wl := f.freqLow / (f.sampleRate / 2)
 	wh := f.freqHigh / (f.sampleRate / 2)
-	
+
 	// Ensure frequencies are in valid range
 	if wl <= 0.0 {
 		wl = 0.01
@@ -201,22 +201,22 @@ func (f *ButterworthFilter) calculateBandpassCoefficients() error {
 	if wl >= wh {
 		wl = wh - 0.01
 	}
-	
+
 	// Calculate center frequency and bandwidth
 	wc := math.Sqrt(wl * wh)
 	bw := wh - wl
-	
+
 	// Force to 2nd order for stability
 	f.order = 2
-	
+
 	// Second order bandpass Butterworth using more stable formulation
 	Q := wc / bw
 	K := math.Tan(math.Pi * wc / 2)
 	norm := 1.0 / (1.0 + K/Q + K*K)
-	
+
 	f.b = []float64{K / Q * norm, 0, -K / Q * norm}
 	f.a = []float64{1, 2.0 * (K*K - 1.0) * norm, (1.0 - K/Q + K*K) * norm}
-	
+
 	return nil
 }
 
@@ -224,7 +224,7 @@ func (f *ButterworthFilter) calculateBandpassCoefficients() error {
 func (f *ButterworthFilter) calculateHighOrderCoefficients() error {
 	// For higher orders, this would implement a cascade of second-order sections
 	// For now, we'll use a simplified approach
-	
+
 	// Default to 2nd order coefficients and warn
 	switch f.filterType {
 	case FilterLowpass:
@@ -237,7 +237,7 @@ func (f *ButterworthFilter) calculateHighOrderCoefficients() error {
 		f.order = 2
 		return f.calculateBandpassCoefficients()
 	}
-	
+
 	return fmt.Errorf("high order filter implementation not complete")
 }
 
@@ -247,26 +247,26 @@ func (f *ButterworthFilter) Apply(input float64) float64 {
 	if math.IsNaN(input) || math.IsInf(input, 0) {
 		input = 0.0
 	}
-	
+
 	// Shift input history
 	for i := len(f.x) - 1; i > 0; i-- {
 		f.x[i] = f.x[i-1]
 	}
 	f.x[0] = input
-	
+
 	// Calculate output using difference equation
 	output := 0.0
-	
+
 	// Feed-forward part (numerator)
 	for i := 0; i < len(f.b) && i < len(f.x); i++ {
 		output += f.b[i] * f.x[i]
 	}
-	
+
 	// Feedback part (denominator, excluding a[0] which is always 1)
 	for i := 1; i < len(f.a) && i < len(f.y); i++ {
 		output -= f.a[i] * f.y[i]
 	}
-	
+
 	// Check for numerical instability
 	if math.IsNaN(output) || math.IsInf(output, 0) {
 		output = 0.0
@@ -278,7 +278,7 @@ func (f *ButterworthFilter) Apply(input float64) float64 {
 			f.y[j] = 0.0
 		}
 	}
-	
+
 	// Clamp output to reasonable range to prevent runaway
 	if math.Abs(output) > 10.0 {
 		if output > 0 {
@@ -287,13 +287,13 @@ func (f *ButterworthFilter) Apply(input float64) float64 {
 			output = -10.0
 		}
 	}
-	
+
 	// Shift output history
 	for i := len(f.y) - 1; i > 0; i-- {
 		f.y[i] = f.y[i-1]
 	}
 	f.y[0] = output
-	
+
 	return output
 }
 
@@ -319,34 +319,34 @@ func (f *ButterworthFilter) Reset() {
 // GetFrequencyResponse calculates the frequency response at given frequencies
 func (f *ButterworthFilter) GetFrequencyResponse(frequencies []float64) ([]complex128, error) {
 	response := make([]complex128, len(frequencies))
-	
+
 	for i, freq := range frequencies {
 		// Convert frequency to normalized angular frequency
 		omega := 2 * math.Pi * freq / f.sampleRate
 		z := complex(math.Cos(omega), math.Sin(omega))
-		
+
 		// Calculate H(z) = B(z)/A(z)
 		numerator := complex(0, 0)
 		denominator := complex(0, 0)
-		
+
 		// Calculate numerator B(z)
 		zPower := complex(1, 0)
 		for j := 0; j < len(f.b); j++ {
 			numerator += complex(f.b[j], 0) * zPower
 			zPower *= z
 		}
-		
+
 		// Calculate denominator A(z)
 		zPower = complex(1, 0)
 		for j := 0; j < len(f.a); j++ {
 			denominator += complex(f.a[j], 0) * zPower
 			zPower *= z
 		}
-		
+
 		// H(z) = B(z)/A(z)
 		response[i] = numerator / denominator
 	}
-	
+
 	return response, nil
 }
 
@@ -356,12 +356,12 @@ func (f *ButterworthFilter) GetMagnitudeResponse(frequencies []float64) ([]float
 	if err != nil {
 		return nil, err
 	}
-	
+
 	magnitude := make([]float64, len(response))
 	for i, h := range response {
 		magnitude[i] = math.Sqrt(real(h)*real(h) + imag(h)*imag(h))
 	}
-	
+
 	return magnitude, nil
 }
 
@@ -371,12 +371,12 @@ func (f *ButterworthFilter) GetPhaseResponse(frequencies []float64) ([]float64, 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	phase := make([]float64, len(response))
 	for i, h := range response {
 		phase[i] = math.Atan2(imag(h), real(h))
 	}
-	
+
 	return phase, nil
 }
 

@@ -33,7 +33,7 @@ type NotificationWorker struct {
 // NewNotificationManager creates a new notification manager
 func NewNotificationManager(config NotificationConfig) *NotificationManager {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	return &NotificationManager{
 		config:    config,
 		providers: make(map[string]NotificationProvider),
@@ -49,12 +49,12 @@ func NewNotificationManager(config NotificationConfig) *NotificationManager {
 func (nm *NotificationManager) RegisterProvider(provider NotificationProvider) error {
 	nm.mutex.Lock()
 	defer nm.mutex.Unlock()
-	
+
 	if !provider.IsEnabled() {
 		log.Printf("Provider %s is disabled, skipping registration", provider.GetName())
 		return nil
 	}
-	
+
 	nm.providers[provider.GetName()] = provider
 	log.Printf("Registered notification provider: %s", provider.GetName())
 	return nil
@@ -66,13 +66,13 @@ func (nm *NotificationManager) Start() error {
 		log.Println("Notification manager is disabled")
 		return nil
 	}
-	
+
 	log.Printf("Starting notification manager with %d workers", nm.config.Workers)
-	
+
 	// Start result processor
 	nm.wg.Add(1)
 	go nm.processResults()
-	
+
 	// Start workers
 	for i := 0; i < nm.config.Workers; i++ {
 		worker := &NotificationWorker{
@@ -81,11 +81,11 @@ func (nm *NotificationManager) Start() error {
 			stopChan: make(chan struct{}),
 		}
 		nm.workers = append(nm.workers, worker)
-		
+
 		nm.wg.Add(1)
 		go worker.start()
 	}
-	
+
 	log.Println("Notification manager started successfully")
 	return nil
 }
@@ -93,22 +93,22 @@ func (nm *NotificationManager) Start() error {
 // Stop stops the notification manager
 func (nm *NotificationManager) Stop() error {
 	log.Println("Stopping notification manager...")
-	
+
 	// Signal cancellation
 	nm.cancel()
-	
+
 	// Stop all workers
 	for _, worker := range nm.workers {
 		close(worker.stopChan)
 	}
-	
+
 	// Close channels
 	close(nm.queue)
 	close(nm.results)
-	
+
 	// Wait for all goroutines to finish
 	nm.wg.Wait()
-	
+
 	log.Println("Notification manager stopped")
 	return nil
 }
@@ -118,9 +118,9 @@ func (nm *NotificationManager) SendAlert(alert Alert) error {
 	if !nm.config.Enabled {
 		return nil
 	}
-	
+
 	message := nm.formatAlertMessage(alert)
-	
+
 	// Send to all enabled providers
 	nm.mutex.RLock()
 	providers := make([]string, 0, len(nm.providers))
@@ -128,7 +128,7 @@ func (nm *NotificationManager) SendAlert(alert Alert) error {
 		providers = append(providers, name)
 	}
 	nm.mutex.RUnlock()
-	
+
 	for _, providerName := range providers {
 		job := NotificationJob{
 			ID:         uuid.New().String(),
@@ -142,7 +142,7 @@ func (nm *NotificationManager) SendAlert(alert Alert) error {
 				"alert": alert,
 			},
 		}
-		
+
 		select {
 		case nm.queue <- job:
 		case <-nm.ctx.Done():
@@ -151,7 +151,7 @@ func (nm *NotificationManager) SendAlert(alert Alert) error {
 			log.Printf("Warning: notification queue full, dropping alert for provider %s", providerName)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -160,9 +160,9 @@ func (nm *NotificationManager) SendReset(reset Reset) error {
 	if !nm.config.Enabled {
 		return nil
 	}
-	
+
 	message := nm.formatResetMessage(reset)
-	
+
 	// Send to all enabled providers
 	nm.mutex.RLock()
 	providers := make([]string, 0, len(nm.providers))
@@ -170,7 +170,7 @@ func (nm *NotificationManager) SendReset(reset Reset) error {
 		providers = append(providers, name)
 	}
 	nm.mutex.RUnlock()
-	
+
 	for _, providerName := range providers {
 		job := NotificationJob{
 			ID:         uuid.New().String(),
@@ -184,7 +184,7 @@ func (nm *NotificationManager) SendReset(reset Reset) error {
 				"reset": reset,
 			},
 		}
-		
+
 		select {
 		case nm.queue <- job:
 		case <-nm.ctx.Done():
@@ -193,7 +193,7 @@ func (nm *NotificationManager) SendReset(reset Reset) error {
 			log.Printf("Warning: notification queue full, dropping reset for provider %s", providerName)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -202,15 +202,15 @@ func (nm *NotificationManager) SendCustomMessage(providerName, message string) e
 	if !nm.config.Enabled {
 		return nil
 	}
-	
+
 	nm.mutex.RLock()
 	_, exists := nm.providers[providerName]
 	nm.mutex.RUnlock()
-	
+
 	if !exists {
 		return fmt.Errorf("provider %s not found", providerName)
 	}
-	
+
 	job := NotificationJob{
 		ID:         uuid.New().String(),
 		Type:       NotificationText,
@@ -220,7 +220,7 @@ func (nm *NotificationManager) SendCustomMessage(providerName, message string) e
 		Retry:      0,
 		MaxRetries: nm.config.MaxRetries,
 	}
-	
+
 	select {
 	case nm.queue <- job:
 		return nil
@@ -235,7 +235,7 @@ func (nm *NotificationManager) SendCustomMessage(providerName, message string) e
 func (nm *NotificationManager) GetProviders() []string {
 	nm.mutex.RLock()
 	defer nm.mutex.RUnlock()
-	
+
 	providers := make([]string, 0, len(nm.providers))
 	for name := range nm.providers {
 		providers = append(providers, name)
@@ -276,7 +276,7 @@ func (nm *NotificationManager) formatResetMessage(reset Reset) string {
 // processResults processes notification results
 func (nm *NotificationManager) processResults() {
 	defer nm.wg.Done()
-	
+
 	for {
 		select {
 		case result := <-nm.results:
@@ -297,9 +297,9 @@ func (nm *NotificationManager) processResults() {
 // start starts a notification worker
 func (nw *NotificationWorker) start() {
 	defer nw.manager.wg.Done()
-	
+
 	log.Printf("Notification worker %d started", nw.id)
-	
+
 	for {
 		select {
 		case job, ok := <-nw.manager.queue:
@@ -308,11 +308,11 @@ func (nw *NotificationWorker) start() {
 				return
 			}
 			nw.processJob(job)
-			
+
 		case <-nw.stopChan:
 			log.Printf("Notification worker %d stopping (stop signal)", nw.id)
 			return
-			
+
 		case <-nw.manager.ctx.Done():
 			log.Printf("Notification worker %d stopping (context cancelled)", nw.id)
 			return
@@ -323,12 +323,12 @@ func (nw *NotificationWorker) start() {
 // processJob processes a single notification job
 func (nw *NotificationWorker) processJob(job NotificationJob) {
 	start := time.Now()
-	
+
 	// Get provider
 	nw.manager.mutex.RLock()
 	provider, exists := nw.manager.providers[job.Provider]
 	nw.manager.mutex.RUnlock()
-	
+
 	if !exists {
 		result := NotificationResult{
 			JobID:     job.ID,
@@ -338,14 +338,14 @@ func (nw *NotificationWorker) processJob(job NotificationJob) {
 			Timestamp: time.Now(),
 			Duration:  time.Since(start),
 		}
-		
+
 		select {
 		case nw.manager.results <- result:
 		case <-nw.manager.ctx.Done():
 		}
 		return
 	}
-	
+
 	// Send notification
 	var err error
 	switch job.Type {
@@ -356,7 +356,7 @@ func (nw *NotificationWorker) processJob(job NotificationJob) {
 	default:
 		err = fmt.Errorf("unsupported notification type: %s", job.Type)
 	}
-	
+
 	result := NotificationResult{
 		JobID:     job.ID,
 		Provider:  job.Provider,
@@ -364,14 +364,14 @@ func (nw *NotificationWorker) processJob(job NotificationJob) {
 		Timestamp: time.Now(),
 		Duration:  time.Since(start),
 	}
-	
+
 	if err != nil {
 		result.Error = err.Error()
-		
+
 		// Retry if possible
 		if job.Retry < job.MaxRetries {
 			job.Retry++
-			
+
 			// Schedule retry with delay
 			go func() {
 				time.Sleep(nw.manager.config.RetryDelay)
@@ -380,12 +380,12 @@ func (nw *NotificationWorker) processJob(job NotificationJob) {
 				case <-nw.manager.ctx.Done():
 				}
 			}()
-			
+
 			log.Printf("Retrying notification: provider=%s, job_id=%s, retry=%d/%d",
 				job.Provider, job.ID, job.Retry, job.MaxRetries)
 		}
 	}
-	
+
 	// Send result
 	select {
 	case nw.manager.results <- result:

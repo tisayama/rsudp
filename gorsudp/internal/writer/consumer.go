@@ -13,14 +13,14 @@ import (
 
 // WriterConsumer processes data events for continuous recording
 type WriterConsumer struct {
-	id            string
-	config        config.Write
+	id             string
+	config         config.Write
 	miniSeedWriter *MiniSeedWriter
-	stream        *stream.Stream
-	channelFilter []string
-	stats         *WriteStats
-	flushTicker   *time.Ticker
-	stopChan      chan struct{}
+	stream         *stream.Stream
+	channelFilter  []string
+	stats          *WriteStats
+	flushTicker    *time.Ticker
+	stopChan       chan struct{}
 }
 
 // NewWriterConsumer creates a new writer consumer
@@ -147,14 +147,14 @@ func (wc *WriterConsumer) processData(event broker.Event) error {
 	// Write data to MiniSEED
 	err = wc.miniSeedWriter.WriteData(
 		packet.Channel,
-		"AM",           // Network - TODO: Get from config
-		"Z0000",        // Station - TODO: Get from config  
-		"00",           // Location - TODO: Get from config
+		"AM",    // Network - TODO: Get from config
+		"Z0000", // Station - TODO: Get from config
+		"00",    // Location - TODO: Get from config
 		timestamp,
 		packet.Data,
-		100.0,          // Sample rate - TODO: Get from packet or config
+		100.0, // Sample rate - TODO: Get from packet or config
 	)
-	
+
 	if err != nil {
 		wc.updateErrorStats()
 		return fmt.Errorf("failed to write MiniSEED data: %v", err)

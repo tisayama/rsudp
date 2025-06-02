@@ -11,17 +11,17 @@ import (
 
 // Trace represents a single channel of time series data
 type Trace struct {
-	Data        []float64 `json:"data"`
-	Station     string    `json:"station"`
-	Network     string    `json:"network"`
-	Channel     string    `json:"channel"`
-	Location    string    `json:"location"`
-	SampleRate  float64   `json:"sample_rate"`
-	StartTime   time.Time `json:"start_time"`
-	EndTime     time.Time `json:"end_time"`
-	Delta       float64   `json:"delta"` // Sample interval (1/SampleRate)
-	NumSamples  int       `json:"num_samples"`
-	
+	Data       []float64 `json:"data"`
+	Station    string    `json:"station"`
+	Network    string    `json:"network"`
+	Channel    string    `json:"channel"`
+	Location   string    `json:"location"`
+	SampleRate float64   `json:"sample_rate"`
+	StartTime  time.Time `json:"start_time"`
+	EndTime    time.Time `json:"end_time"`
+	Delta      float64   `json:"delta"` // Sample interval (1/SampleRate)
+	NumSamples int       `json:"num_samples"`
+
 	// Internal metadata
 	lastUpdate time.Time
 	mutex      sync.RWMutex
@@ -48,13 +48,13 @@ func NewTrace(station, network, channel, location string, sampleRate float64, st
 func (t *Trace) AppendData(data []int32, timestamp time.Time) {
 	t.mutex.Lock()
 	defer t.mutex.Unlock()
-	
+
 	// Convert int32 to float64
 	floatData := make([]float64, len(data))
 	for i, d := range data {
 		floatData[i] = float64(d)
 	}
-	
+
 	t.Data = append(t.Data, floatData...)
 	t.NumSamples += len(data)
 	t.EndTime = timestamp.Add(time.Duration(len(data)) * time.Duration(t.Delta*1e9))
@@ -65,7 +65,7 @@ func (t *Trace) AppendData(data []int32, timestamp time.Time) {
 func (t *Trace) GetData() []float64 {
 	t.mutex.RLock()
 	defer t.mutex.RUnlock()
-	
+
 	data := make([]float64, len(t.Data))
 	copy(data, t.Data)
 	return data
@@ -75,23 +75,23 @@ func (t *Trace) GetData() []float64 {
 func (t *Trace) Slice(startTime, endTime time.Time) *Trace {
 	t.mutex.RLock()
 	defer t.mutex.RUnlock()
-	
+
 	if startTime.After(t.EndTime) || endTime.Before(t.StartTime) {
 		// No overlap
 		return NewTrace(t.Station, t.Network, t.Channel, t.Location, t.SampleRate, startTime)
 	}
-	
+
 	// Calculate sample indices
 	startIdx := 0
 	if startTime.After(t.StartTime) {
 		startIdx = int(startTime.Sub(t.StartTime).Seconds() * t.SampleRate)
 	}
-	
+
 	endIdx := len(t.Data)
 	if endTime.Before(t.EndTime) {
 		endIdx = int(endTime.Sub(t.StartTime).Seconds() * t.SampleRate)
 	}
-	
+
 	// Ensure indices are within bounds
 	if startIdx < 0 {
 		startIdx = 0
@@ -102,14 +102,14 @@ func (t *Trace) Slice(startTime, endTime time.Time) *Trace {
 	if startIdx >= endIdx {
 		return NewTrace(t.Station, t.Network, t.Channel, t.Location, t.SampleRate, startTime)
 	}
-	
+
 	// Create new trace with sliced data
 	newTrace := NewTrace(t.Station, t.Network, t.Channel, t.Location, t.SampleRate, startTime)
 	newTrace.Data = make([]float64, endIdx-startIdx)
 	copy(newTrace.Data, t.Data[startIdx:endIdx])
 	newTrace.NumSamples = len(newTrace.Data)
 	newTrace.EndTime = endTime
-	
+
 	return newTrace
 }
 
@@ -117,7 +117,7 @@ func (t *Trace) Slice(startTime, endTime time.Time) *Trace {
 func (t *Trace) Copy() *Trace {
 	t.mutex.RLock()
 	defer t.mutex.RUnlock()
-	
+
 	newTrace := &Trace{
 		Data:       make([]float64, len(t.Data)),
 		Station:    t.Station,
@@ -131,7 +131,7 @@ func (t *Trace) Copy() *Trace {
 		NumSamples: t.NumSamples,
 		lastUpdate: t.lastUpdate,
 	}
-	
+
 	copy(newTrace.Data, t.Data)
 	return newTrace
 }
@@ -145,14 +145,14 @@ func (t *Trace) ID() string {
 func (t *Trace) Stats() TraceStats {
 	t.mutex.RLock()
 	defer t.mutex.RUnlock()
-	
+
 	if len(t.Data) == 0 {
 		return TraceStats{}
 	}
-	
+
 	min, max := t.Data[0], t.Data[0]
 	sum := 0.0
-	
+
 	for _, v := range t.Data {
 		if v < min {
 			min = v
@@ -162,9 +162,9 @@ func (t *Trace) Stats() TraceStats {
 		}
 		sum += v
 	}
-	
+
 	mean := sum / float64(len(t.Data))
-	
+
 	// Calculate standard deviation
 	variance := 0.0
 	for _, v := range t.Data {
@@ -173,7 +173,7 @@ func (t *Trace) Stats() TraceStats {
 	}
 	variance /= float64(len(t.Data))
 	stddev := variance // Square root calculation would need math package
-	
+
 	return TraceStats{
 		Min:     min,
 		Max:     max,
@@ -209,7 +209,7 @@ func NewStream() *Stream {
 func (s *Stream) AddTrace(trace *Trace) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	
+
 	s.Traces[trace.ID()] = trace
 }
 
@@ -217,7 +217,7 @@ func (s *Stream) AddTrace(trace *Trace) {
 func (s *Stream) GetTrace(id string) (*Trace, bool) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
-	
+
 	trace, exists := s.Traces[id]
 	return trace, exists
 }
@@ -226,7 +226,7 @@ func (s *Stream) GetTrace(id string) (*Trace, bool) {
 func (s *Stream) GetTraceByChannel(channel string) (*Trace, bool) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
-	
+
 	for _, trace := range s.Traces {
 		if trace.Channel == channel {
 			return trace, true
@@ -240,20 +240,20 @@ func (s *Stream) UpdateFromPacket(packet *shakenet.UDPPacket, station, network s
 	// Create trace ID
 	location := "00" // Default location
 	traceID := fmt.Sprintf("%s.%s.%s.%s", network, station, location, packet.Channel)
-	
+
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
-	
+
 	trace, exists := s.Traces[traceID]
 	if !exists {
 		// Create new trace
 		trace = NewTrace(station, network, packet.Channel, location, packet.SampleRate(), packet.Timestamp)
 		s.Traces[traceID] = trace
 	}
-	
+
 	// Append data to trace
 	trace.AppendData(packet.Data, packet.Timestamp)
-	
+
 	return nil
 }
 
@@ -261,16 +261,16 @@ func (s *Stream) UpdateFromPacket(packet *shakenet.UDPPacket, station, network s
 func (s *Stream) Slice(startTime, endTime time.Time) *Stream {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
-	
+
 	newStream := NewStream()
-	
+
 	for id, trace := range s.Traces {
 		slicedTrace := trace.Slice(startTime, endTime)
 		if slicedTrace.NumSamples > 0 {
 			newStream.Traces[id] = slicedTrace
 		}
 	}
-	
+
 	return newStream
 }
 
@@ -278,13 +278,13 @@ func (s *Stream) Slice(startTime, endTime time.Time) *Stream {
 func (s *Stream) Copy() *Stream {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
-	
+
 	newStream := NewStream()
-	
+
 	for id, trace := range s.Traces {
 		newStream.Traces[id] = trace.Copy()
 	}
-	
+
 	return newStream
 }
 
@@ -292,12 +292,12 @@ func (s *Stream) Copy() *Stream {
 func (s *Stream) GetChannels() []string {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
-	
+
 	channels := make([]string, 0, len(s.Traces))
 	for _, trace := range s.Traces {
 		channels = append(channels, trace.Channel)
 	}
-	
+
 	return channels
 }
 
@@ -305,6 +305,6 @@ func (s *Stream) GetChannels() []string {
 func (s *Stream) Count() int {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
-	
+
 	return len(s.Traces)
 }

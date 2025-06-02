@@ -1,6 +1,6 @@
 // WebSocket message types
 export interface WebSocketMessage {
-  type: 'plot_data' | 'alert' | 'system_status' | 'config' | 'ping' | 'pong'
+  type: 'plot_data' | 'alert' | 'system_status' | 'config' | 'sta_lta_data' | 'ping' | 'pong'
   data: any
 }
 
@@ -44,6 +44,20 @@ export interface ConfigMessage {
     spectrogram_freq_range: boolean
     lower_limit: number
     upper_limit: number
+  }
+}
+
+export interface STALTAMessage {
+  type: 'sta_lta_data'
+  data: {
+    timestamp: string
+    channel: string
+    sta_value: number
+    lta_value: number
+    ratio: number
+    threshold: number
+    reset: number
+    triggered: boolean
   }
 }
 
@@ -91,3 +105,15 @@ export interface ChartConfig {
 
 // Color scale types for spectrogram
 export type ColorScale = 'viridis' | 'plasma' | 'inferno' | 'magma'
+
+// STA/LTA data types
+export interface STALTAData {
+  timestamp: Date
+  channel: string
+  staValue: number
+  ltaValue: number
+  ratio: number
+  threshold: number
+  reset: number
+  triggered: boolean
+}

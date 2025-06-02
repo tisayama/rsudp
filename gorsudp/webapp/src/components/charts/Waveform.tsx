@@ -52,49 +52,36 @@ export const Waveform: React.FC<WaveformProps> = ({
 
   // Mount effect to track component lifecycle
   useEffect(() => {
-    // console.log('🔥 Waveform component MOUNTED for channel:', channel)
     mountedRef.current = true
     
     return () => {
-      // console.log('💀 Waveform component UNMOUNTED for channel:', channel)
       mountedRef.current = false
     }
   }, [channel])
 
   useEffect(() => {
-    const renderTime = new Date().toISOString()
-    const componentId = `waveform-${channel}-${Math.random().toString(36).substr(2, 9)}`
-    
     // Create a unique key for this render based on data content, not just length
     // Use the timestamp of the last data point to ensure updates when data changes
     const lastDataTimestamp = data.length > 0 ? data[data.length - 1].timestamp.getTime() : 0
     const renderKey = `${channel}-${data.length}-${lastDataTimestamp}-${width}-${height}-${timeWindow}`
     
-    // console.log('🌊 Waveform render:', componentId, 'data:', data.length, 'time:', renderTime)
-    // console.log('🔐 Render key:', renderKey, 'last key:', lastRenderKey.current)
-    
     // Skip rendering if component is not properly mounted
     if (!mountedRef.current) {
-      // console.log('⛔ Skipping render: component not mounted')
       return
     }
     
     // Check if already rendering or same render
     if (renderingRef.current) {
-      // console.log('⛔ Skipping render: already in progress')
       return
     }
     
     if (renderKey === lastRenderKey.current) {
-      // console.log('⛔ Skipping render: same render key')
       return
     }
     
     // Set rendering guard
     renderingRef.current = true
     lastRenderKey.current = renderKey
-    
-    // console.log('✅ Starting render with key:', renderKey)
     
     if (!svgRef.current) {
       renderingRef.current = false
@@ -118,15 +105,7 @@ export const Waveform: React.FC<WaveformProps> = ({
       const innerHeight = height - margin.top - margin.bottom
 
       // Completely reset SVG by setting innerHTML (most reliable method)
-      console.log('🧹 Before clear - SVG elements:', svg.selectAll('*').size())
-      console.log('🧹 Before clear - Paths specifically:', svg.selectAll('path').size())
-      console.log('🧹 SVG innerHTML before:', svgRef.current.innerHTML.length, 'chars')
-      
       svgRef.current.innerHTML = ''
-      
-      console.log('🧹 After innerHTML clear - SVG elements:', svg.selectAll('*').size())
-      console.log('🧹 After innerHTML clear - Paths specifically:', svg.selectAll('path').size())
-      console.log('🧹 SVG innerHTML after:', svgRef.current.innerHTML.length, 'chars')
       
       // Set SVG dimensions and stable ID based on channel only
       const svgId = `waveform-svg-${channel}`  // Stable ID based on channel
@@ -136,13 +115,6 @@ export const Waveform: React.FC<WaveformProps> = ({
         .attr('height', height)
         .attr('viewBox', `0 0 ${width} ${height}`)
       
-      console.log('🏷️ SVG ID set to stable ID:', svgId, '(component:', componentId, ')')
-      
-      // Check total SVG elements in the document
-      const allSvgs = document.querySelectorAll('svg')
-      const allWaveformSvgs = document.querySelectorAll('svg[id*="waveform"]')
-      console.log('🔍 Total SVG elements in document:', allSvgs.length)
-      console.log('🔍 Total waveform SVG elements:', allWaveformSvgs.length)
 
     // Get data within time window
     const windowedData = getTimeWindow(data, timeWindow)
@@ -153,8 +125,6 @@ export const Waveform: React.FC<WaveformProps> = ({
       ...d,
       value: units === 'nm/s' ? nanometersToMicrometers(d.value) : d.value
     }))
-    
-    // console.log('📊 Processed:', processedData.length, 'points')
 
     // Setup scales - Use linear scale with millisecond timestamps for better precision
     // Always show a fixed time window even if data doesn't fill it completely
@@ -249,16 +219,6 @@ export const Waveform: React.FC<WaveformProps> = ({
     // Use processed data directly (filtering was done in processing step)
     const validData = processedData
     
-    console.log('✅ Using data points:', validData.length)
-    if (validData.length > 0) {
-      console.log('Sample data:', {
-        first: { t: validData[0].timestamp.toISOString(), v: validData[0].value },
-        last: { t: validData[validData.length - 1].timestamp.toISOString(), v: validData[validData.length - 1].value }
-      })
-      
-      // Removed duplicate checking debug logs for cleaner console output
-    }
-    
     // Create line generator (remove .defined() to prevent unwanted connections)
     const line = d3.line<WaveformData>()
       .x(d => xScale(d.timestamp.getTime()))
@@ -298,7 +258,6 @@ export const Waveform: React.FC<WaveformProps> = ({
     } finally {
       // Always clear rendering guard
       renderingRef.current = false
-      // console.log('🔓 Render complete, guard cleared')
     }
   }, [data, width, height, timeWindow, showGrid, autoScale, units, channel])
 

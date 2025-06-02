@@ -377,9 +377,9 @@ func (dp *DiscordProvider) TestConnection() error {
 
 // contains checks if a string contains a substring
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && 
-		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr || 
-		 indexOf(s, substr) >= 0))
+	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
+		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
+			indexOf(s, substr) >= 0))
 }
 
 // indexOf returns the index of substr in s, or -1 if not found

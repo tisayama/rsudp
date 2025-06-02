@@ -15,20 +15,20 @@ import (
 
 // UDPProducer receives UDP packets from Raspberry Shake devices and distributes them via broker
 type UDPProducer struct {
-	port         int
-	conn         *net.UDPConn
-	broker       *broker.MessageBroker
-	firstSender  *net.UDPAddr
-	running      bool
-	ctx          context.Context
-	cancel       context.CancelFunc
-	wg           sync.WaitGroup
-	mutex        sync.RWMutex
-	
+	port        int
+	conn        *net.UDPConn
+	broker      *broker.MessageBroker
+	firstSender *net.UDPAddr
+	running     bool
+	ctx         context.Context
+	cancel      context.CancelFunc
+	wg          sync.WaitGroup
+	mutex       sync.RWMutex
+
 	// Configuration
-	bufferSize   int
-	timeout      time.Duration
-	
+	bufferSize int
+	timeout    time.Duration
+
 	// Metrics
 	packetsReceived int64
 	packetsDropped  int64
@@ -56,14 +56,14 @@ func DefaultConfig() Config {
 // NewUDPProducer creates a new UDP producer
 func NewUDPProducer(config Config, messageBroker *broker.MessageBroker) *UDPProducer {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	return &UDPProducer{
-		port:        config.Port,
-		broker:      messageBroker,
-		bufferSize:  config.BufferSize,
-		timeout:     config.Timeout,
-		ctx:         ctx,
-		cancel:      cancel,
+		port:       config.Port,
+		broker:     messageBroker,
+		bufferSize: config.BufferSize,
+		timeout:    config.Timeout,
+		ctx:        ctx,
+		cancel:     cancel,
 	}
 }
 
@@ -71,35 +71,35 @@ func NewUDPProducer(config Config, messageBroker *broker.MessageBroker) *UDPProd
 func (p *UDPProducer) Start() error {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
-	
+
 	if p.running {
 		return fmt.Errorf("producer is already running")
 	}
-	
+
 	// Create UDP address
 	addr, err := net.ResolveUDPAddr("udp", fmt.Sprintf(":%d", p.port))
 	if err != nil {
 		return fmt.Errorf("failed to resolve UDP address: %v", err)
 	}
-	
+
 	// Listen on UDP port
 	conn, err := net.ListenUDP("udp", addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen on UDP port %d: %v", p.port, err)
 	}
-	
+
 	p.conn = conn
 	p.running = true
-	
+
 	// Set read timeout if specified
 	if p.timeout > 0 {
 		p.conn.SetReadDeadline(time.Now().Add(p.timeout))
 	}
-	
+
 	// Start packet reception loop
 	p.wg.Add(1)
 	go p.receiveLoop()
-	
+
 	log.Printf("UDP Producer started listening on port %d", p.port)
 	return nil
 }
@@ -113,16 +113,16 @@ func (p *UDPProducer) Stop() error {
 	}
 	p.running = false
 	p.mutex.Unlock()
-	
+
 	// Cancel context and close connection
 	p.cancel()
 	if p.conn != nil {
 		p.conn.Close()
 	}
-	
+
 	// Wait for receive loop to finish
 	p.wg.Wait()
-	
+
 	log.Println("UDP Producer stopped")
 	return nil
 }
@@ -130,9 +130,9 @@ func (p *UDPProducer) Stop() error {
 // receiveLoop is the main packet reception loop
 func (p *UDPProducer) receiveLoop() {
 	defer p.wg.Done()
-	
+
 	buffer := make([]byte, p.bufferSize)
-	
+
 	for {
 		select {
 		case <-p.ctx.Done():
@@ -141,12 +141,12 @@ func (p *UDPProducer) receiveLoop() {
 		default:
 			// Continue with packet reception
 		}
-		
+
 		// Set read deadline for timeout handling
 		if p.timeout > 0 {
 			p.conn.SetReadDeadline(time.Now().Add(p.timeout))
 		}
-		
+
 		// Read UDP packet
 		n, addr, err := p.conn.ReadFromUDP(buffer)
 		if err != nil {
@@ -164,7 +164,7 @@ func (p *UDPProducer) receiveLoop() {
 					continue
 				}
 			}
-			
+
 			// Check if connection was closed during shutdown
 			select {
 			case <-p.ctx.Done():
@@ -175,7 +175,7 @@ func (p *UDPProducer) receiveLoop() {
 				continue
 			}
 		}
-		
+
 		// Process the received packet
 		if err := p.processPacket(buffer[:n], addr); err != nil {
 			log.Printf("Error processing packet from %s: %v", addr, err)
@@ -192,7 +192,7 @@ func (p *UDPProducer) processPacket(data []byte, addr *net.UDPAddr) error {
 	p.bytesReceived += int64(len(data))
 	p.lastPacketTime = time.Now()
 	p.mutex.Unlock()
-	
+
 	// Check if this is the first sender or matches the first sender
 	if p.firstSender == nil {
 		p.mutex.Lock()
@@ -203,22 +203,22 @@ func (p *UDPProducer) processPacket(data []byte, addr *net.UDPAddr) error {
 		p.mutex.Unlock()
 	} else if !p.firstSender.IP.Equal(addr.IP) {
 		// Ignore packets from different senders (security feature)
-		log.Printf("Ignoring packet from unauthorized sender: %s (expected: %s)", 
+		log.Printf("Ignoring packet from unauthorized sender: %s (expected: %s)",
 			addr, p.firstSender)
 		return nil
 	}
-	
+
 	// Parse UDP packet
 	packet, err := shakenet.ParseUDPPacket(data)
 	if err != nil {
 		return fmt.Errorf("failed to parse UDP packet: %v", err)
 	}
-	
+
 	// Validate packet
 	if !packet.IsValidChannel() {
 		return fmt.Errorf("invalid channel: %s", packet.Channel)
 	}
-	
+
 	// Publish to broker
 	if err := p.broker.PublishData(packet); err != nil {
 		p.mutex.Lock()
@@ -226,7 +226,7 @@ func (p *UDPProducer) processPacket(data []byte, addr *net.UDPAddr) error {
 		p.mutex.Unlock()
 		return fmt.Errorf("failed to publish packet: %v", err)
 	}
-	
+
 	return nil
 }
 
@@ -241,7 +241,7 @@ func (p *UDPProducer) incrementErrors() {
 func (p *UDPProducer) GetMetrics() ProducerMetrics {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
-	
+
 	return ProducerMetrics{
 		PacketsReceived: p.packetsReceived,
 		PacketsDropped:  p.packetsDropped,
@@ -255,27 +255,27 @@ func (p *UDPProducer) GetMetrics() ProducerMetrics {
 
 // ProducerMetrics holds metrics about producer performance
 type ProducerMetrics struct {
-	PacketsReceived int64         `json:"packets_received"`
-	PacketsDropped  int64         `json:"packets_dropped"`
-	BytesReceived   int64         `json:"bytes_received"`
-	LastPacketTime  time.Time     `json:"last_packet_time"`
-	Errors          int64         `json:"errors"`
-	FirstSender     *net.UDPAddr  `json:"first_sender"`
-	Running         bool          `json:"running"`
+	PacketsReceived int64        `json:"packets_received"`
+	PacketsDropped  int64        `json:"packets_dropped"`
+	BytesReceived   int64        `json:"bytes_received"`
+	LastPacketTime  time.Time    `json:"last_packet_time"`
+	Errors          int64        `json:"errors"`
+	FirstSender     *net.UDPAddr `json:"first_sender"`
+	Running         bool         `json:"running"`
 }
 
 // GetStatus returns the current status of the producer
 func (p *UDPProducer) GetStatus() ProducerStatus {
 	p.mutex.RLock()
 	defer p.mutex.RUnlock()
-	
+
 	status := ProducerStatus{
 		Running:        p.running,
 		Port:           p.port,
 		FirstSender:    p.firstSender,
 		LastPacketTime: p.lastPacketTime,
 	}
-	
+
 	// Determine health based on recent packet activity
 	if p.running && !p.lastPacketTime.IsZero() {
 		timeSinceLastPacket := time.Since(p.lastPacketTime)
@@ -291,17 +291,17 @@ func (p *UDPProducer) GetStatus() ProducerStatus {
 	} else {
 		status.Health = "stopped"
 	}
-	
+
 	return status
 }
 
 // ProducerStatus represents the current status of the producer
 type ProducerStatus struct {
-	Running        bool          `json:"running"`
-	Port           int           `json:"port"`
-	FirstSender    *net.UDPAddr  `json:"first_sender"`
-	LastPacketTime time.Time     `json:"last_packet_time"`
-	Health         string        `json:"health"` // healthy, warning, unhealthy, waiting, stopped
+	Running        bool         `json:"running"`
+	Port           int          `json:"port"`
+	FirstSender    *net.UDPAddr `json:"first_sender"`
+	LastPacketTime time.Time    `json:"last_packet_time"`
+	Health         string       `json:"health"` // healthy, warning, unhealthy, waiting, stopped
 }
 
 // IsHealthy returns true if the producer is operating normally
@@ -313,18 +313,18 @@ func (p *UDPProducer) IsHealthy() bool {
 // WaitForData waits for the first data packet to arrive or timeout
 func (p *UDPProducer) WaitForData(timeout time.Duration) error {
 	start := time.Now()
-	
+
 	for time.Since(start) < timeout {
 		p.mutex.RLock()
 		hasData := p.packetsReceived > 0
 		p.mutex.RUnlock()
-		
+
 		if hasData {
 			return nil
 		}
-		
+
 		time.Sleep(100 * time.Millisecond)
 	}
-	
+
 	return fmt.Errorf("no data received within %v", timeout)
 }

@@ -311,7 +311,7 @@ func createMockRaspberryShakePacket() []byte {
 	// This is a very basic mock - in reality you'd need proper RS packet structure
 	// For testing purposes, we'll create something that will likely fail parsing
 	// but will exercise the packet processing pipeline
-	
+
 	// Create a mock packet that might resemble actual format but will fail parsing
 	// This allows us to test the metrics update portion of processPacket
 	mockData := make([]byte, 50)

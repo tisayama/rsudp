@@ -54,6 +54,7 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
   showGrid = true
 }) => {
   const svgRef = useRef<SVGSVGElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const [spectrogramData, setSpectrogramData] = useState<SpectrogramColumn[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -156,17 +157,30 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     }
   }, [data, fftSize, overlapRatio, processFFT])
 
-  // Render spectrogram
+  // Render spectrogram using Canvas + SVG hybrid approach
   useEffect(() => {
-    if (!svgRef.current || spectrogramData.length === 0) return
+    if (!svgRef.current || !canvasRef.current || spectrogramData.length === 0) return
 
     const svg = d3.select(svgRef.current)
+    const canvas = canvasRef.current
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return
+
     const margin = defaultMargin
     const innerWidth = width - margin.left - margin.right
     const innerHeight = height - margin.top - margin.bottom
 
+    // Set canvas dimensions (high DPI support)
+    const devicePixelRatio = window.devicePixelRatio || 1
+    canvas.width = innerWidth * devicePixelRatio
+    canvas.height = innerHeight * devicePixelRatio
+    canvas.style.width = `${innerWidth}px`
+    canvas.style.height = `${innerHeight}px`
+    ctx.scale(devicePixelRatio, devicePixelRatio)
+
     // Clear previous content
     clearSVG(svg)
+    ctx.clearRect(0, 0, innerWidth, innerHeight)
 
     // Setup scales - Use same approach as Waveform for consistent time axis
     const now = Date.now()
@@ -197,7 +211,32 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     const colorScaleFunc = getColorScale(colorScale)
       .domain([0, 1])
 
-    // Create main group
+    // Draw spectrogram on Canvas
+    const rectWidth = Math.max(1, innerWidth / spectrogramData.length)
+    
+    spectrogramData.forEach((columnData) => {
+      const x = xScale(columnData.timestamp)
+      const freqStep = (frequencyRange[1] - frequencyRange[0]) / columnData.data.length
+      
+      columnData.data.forEach((freqData) => {
+        const y = yScale(freqData.frequency + freqStep)
+        const rectHeight = Math.max(1, yScale(freqData.frequency) - yScale(freqData.frequency + freqStep))
+        
+        // Set fill color
+        ctx.fillStyle = colorScaleFunc(freqData.normalizedPower)
+        
+        // Draw rectangle
+        ctx.fillRect(x, y, rectWidth, rectHeight)
+      })
+    })
+
+    // Set SVG dimensions
+    svg
+      .attr('width', width)
+      .attr('height', height)
+      .attr('viewBox', `0 0 ${width} ${height}`)
+
+    // Create SVG overlay for axes and labels
     const mainGroup = createGroup(svg, 'main-group', `translate(${margin.left},${margin.top})`)
 
     // Create grid lines
@@ -205,42 +244,6 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
       createGridLines(mainGroup, xScale, { width: innerWidth, height: innerHeight }, 'vertical')
       createGridLines(mainGroup, yScale, { width: innerWidth, height: innerHeight }, 'horizontal')
     }
-
-    // Calculate rectangle dimensions
-    const timeStep = spectrogramData.length > 1 
-      ? (timeDomain[1] - timeDomain[0]) / (spectrogramData.length - 1) 
-      : 1000 // 1 second default
-    const rectWidth = Math.max(2, (innerWidth / spectrogramData.length))
-    
-    // Create rectangles for spectrogram
-    const columns = mainGroup.selectAll('.spectrogram-column')
-      .data(spectrogramData)
-      .enter()
-      .append('g')
-      .attr('class', 'spectrogram-column')
-
-    columns.each(function(columnData) {
-      const column = d3.select(this)
-      
-      const freqStep = (frequencyRange[1] - frequencyRange[0]) / columnData.data.length
-      
-      column.selectAll('rect')
-        .data(columnData.data)
-        .enter()
-        .append('rect')
-        .attr('x', xScale(columnData.timestamp))
-        .attr('y', d => {
-          const y = yScale(d.frequency + freqStep)
-          return isNaN(y) || !isFinite(y) ? 0 : y
-        })
-        .attr('width', isNaN(rectWidth) || !isFinite(rectWidth) ? 1 : rectWidth)
-        .attr('height', d => {
-          const height = yScale(d.frequency) - yScale(d.frequency + freqStep)
-          return isNaN(height) || !isFinite(height) ? 1 : Math.max(1, height)
-        })
-        .attr('fill', d => colorScaleFunc(d.normalizedPower))
-        .attr('stroke', 'none')
-    })
 
     // Create axes - Use custom formatter for linear scale
     const xAxis = d3.axisBottom(xScale)
@@ -344,13 +347,36 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
           )}
         </div>
       </div>
-      <svg
-        ref={svgRef}
-        width={width}
-        height={height}
-        className="spectrogram-chart"
-        style={{ border: '1px solid #e0e0e0' }}
-      />
+      <div style={{ 
+        position: 'relative', 
+        width: `${width}px`, 
+        height: `${height}px`,
+        border: '1px solid #e0e0e0'
+      }}>
+        <canvas
+          ref={canvasRef}
+          className="spectrogram-canvas"
+          style={{
+            position: 'absolute',
+            left: `${defaultMargin.left}px`,
+            top: `${defaultMargin.top}px`,
+            border: 'none'
+          }}
+        />
+        <svg
+          ref={svgRef}
+          width={width}
+          height={height}
+          className="spectrogram-chart"
+          style={{ 
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            zIndex: 10,
+            background: 'transparent'
+          }}
+        />
+      </div>
       
       {/* Color scale legend */}
       <div className="mt-2 flex items-center space-x-2 text-sm text-gray-600">

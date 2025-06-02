@@ -229,6 +229,16 @@ func (server *PlotServer) AddAlert(alert AlertMessage) {
 	server.wsManager.Broadcast(message)
 }
 
+// AddSTALTAData broadcasts STA/LTA data for real-time display
+func (server *PlotServer) AddSTALTAData(stalTAData STALTAMessage) {
+	message := WebSocketMessage{
+		Type: MessageTypeSTALTAData,
+		Data: stalTAData,
+	}
+
+	server.wsManager.Broadcast(message)
+}
+
 // HTTP Handlers
 
 func (server *PlotServer) handleIndex(w http.ResponseWriter, r *http.Request) {
