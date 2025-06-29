@@ -76,7 +76,7 @@ function applyWindow(signal, window) {
   return signal.map((value, index) => value * window[index]);
 }
 
-// Calculate power spectrum from FFT result
+// Calculate power spectrum from FFT result - Python compatible (sg**(1/10))
 function calculatePowerSpectrum(fftResult, sampleRate, frequencyRange) {
   const [minFreq, maxFreq] = frequencyRange;
   const N = fftResult.length;
@@ -90,7 +90,9 @@ function calculatePowerSpectrum(fftResult, sampleRate, frequencyRange) {
     
     if (frequency >= minFreq && frequency <= maxFreq) {
       const magnitude = fftResult[k].real * fftResult[k].real + fftResult[k].imag * fftResult[k].imag;
-      const power = Math.log10(Math.max(magnitude / N, 1e-10)); // Avoid log(0)
+      // Use amplitude (sqrt of power spectral density) for better visibility
+      const amplitude = Math.sqrt(magnitude) / N;
+      const power = amplitude; // Use amplitude directly for now
       
       result.push({
         frequency: frequency,
@@ -149,7 +151,7 @@ self.onmessage = function(e) {
     
     // Prepare result
     const result = {
-      timestamp: Date.now(),
+      timestamp: e.data.timestamp || Date.now(),
       frequencies: normalizedSpectrum.map(p => p.frequency),
       powers: normalizedSpectrum.map(p => p.power),
       normalizedPowers: normalizedSpectrum.map(p => p.normalizedPower),

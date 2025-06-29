@@ -42,11 +42,11 @@
     "filter_waveform": true,
     "filter_spectrogram": false,
     "filter_highpass": 0.7,
-    "filter_lowpass": 9.0,
+    "filter_lowpass": 2.0,
     "filter_corners": 4,
     "spectrogram_freq_range": true,
-    "upper_limit": 9.0,
-    "lower_limit": 0.7,
+    "upper_limit": 50.0,
+    "lower_limit": 0.0,
     "logarithmic_y_axis": true
   },
   "write": {

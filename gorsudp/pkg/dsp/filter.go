@@ -279,13 +279,10 @@ func (f *ButterworthFilter) Apply(input float64) float64 {
 		}
 	}
 
-	// Clamp output to reasonable range to prevent runaway
-	if math.Abs(output) > 10.0 {
-		if output > 0 {
-			output = 10.0
-		} else {
-			output = -10.0
-		}
+	// Limit extreme values to prevent numerical issues
+	const maxAmplitude = 1e10
+	if math.Abs(output) > maxAmplitude {
+		output = maxAmplitude * (output / math.Abs(output))
 	}
 
 	// Shift output history
@@ -303,6 +300,31 @@ func (f *ButterworthFilter) ApplySlice(input []float64) []float64 {
 	for i, sample := range input {
 		output[i] = f.Apply(sample)
 	}
+	return output
+}
+
+// ApplyZeroPhase applies the filter in forward and backward direction for zero-phase response
+// This is similar to ObsPy's filtfilt (forward-backward filtering)
+func (f *ButterworthFilter) ApplyZeroPhase(input []float64) []float64 {
+	// First pass: forward filtering
+	forward := make([]float64, len(input))
+	f.Reset() // Reset filter state
+	for i, sample := range input {
+		forward[i] = f.Apply(sample)
+	}
+	
+	// Second pass: backward filtering
+	output := make([]float64, len(input))
+	f.Reset() // Reset filter state
+	for i := len(forward) - 1; i >= 0; i-- {
+		output[i] = f.Apply(forward[i])
+	}
+	
+	// Reverse the output to get correct time order
+	for i, j := 0, len(output)-1; i < j; i, j = i+1, j-1 {
+		output[i], output[j] = output[j], output[i]
+	}
+	
 	return output
 }
 
@@ -392,4 +414,26 @@ type FilterConfig struct {
 // NewFilterFromConfig creates a filter from configuration
 func NewFilterFromConfig(config FilterConfig) (*ButterworthFilter, error) {
 	return NewButterworthFilter(config.Type, config.Order, config.FreqLow, config.FreqHigh, config.SampleRate)
+}
+
+// RemoveDCOffset removes the DC offset (mean) from the signal
+func RemoveDCOffset(data []float64) []float64 {
+	if len(data) == 0 {
+		return data
+	}
+
+	// Calculate mean
+	var sum float64
+	for _, value := range data {
+		sum += value
+	}
+	mean := sum / float64(len(data))
+
+	// Subtract mean from each sample
+	result := make([]float64, len(data))
+	for i, value := range data {
+		result[i] = value - mean
+	}
+
+	return result
 }

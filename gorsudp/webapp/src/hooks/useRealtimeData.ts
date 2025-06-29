@@ -91,8 +91,7 @@ export const useRealtimeData = (maxDataPoints = 12000): UseRealtimeDataReturn =>
 
   const getChannelData = useCallback((channel: string): WaveformData[] => {
     const channelData = channels.get(channel)
-    // Return a new array reference to ensure React detects changes
-    return channelData?.data ? [...channelData.data] : []
+    return channelData?.data || []
   }, [channels])
 
   const getChannelList = useCallback((): string[] => {

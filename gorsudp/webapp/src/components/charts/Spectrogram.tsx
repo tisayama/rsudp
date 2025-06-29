@@ -47,10 +47,10 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
   width,
   height,
   fftSize = 256,
-  overlapRatio = 0.5,
+  overlapRatio = 0.875,
   frequencyRange,
   timeWindow = 120,
-  colorScale = 'viridis',
+  colorScale = 'inferno',
   showGrid = true
 }) => {
   const svgRef = useRef<SVGSVGElement>(null)
@@ -120,9 +120,6 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     })
   }, [fftSize, frequencyRange])
 
-  // Track last processed timestamp to avoid reprocessing
-  const lastProcessedTimestamp = useRef<number>(0)
-  
   // Update spectrogram when new data arrives with overlap
   useEffect(() => {
     if (data.length < fftSize) return
@@ -130,30 +127,17 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     // Calculate step size based on overlap
     const stepSize = Math.floor(fftSize * (1 - overlapRatio))
     
-    // Find the latest complete window we haven't processed yet
-    const latestDataTimestamp = data[data.length - 1]?.timestamp.getTime() || 0
+    // Process the most recent complete window
+    const startIdx = Math.max(0, data.length - fftSize)
+    const windowData = data.slice(startIdx, startIdx + fftSize)
     
-    // Only process if we have new data
-    if (latestDataTimestamp <= lastProcessedTimestamp.current) {
-      return
-    }
-    
-    // Start from the end and work backwards to find unprocessed windows
-    for (let i = data.length - fftSize; i >= 0; i -= stepSize) {
-      const windowData = data.slice(i, i + fftSize)
-      if (windowData.length === fftSize) {
-        // Use the timestamp of the middle of the window
-        const middleIndex = Math.floor(windowData.length / 2)
-        const windowTimestamp = windowData[middleIndex].timestamp.getTime()
-        
-        // Process if this window is newer than last processed
-        if (windowTimestamp > lastProcessedTimestamp.current) {
-          const samples = windowData.map(d => d.value)
-          processFFT(samples, windowTimestamp)
-          lastProcessedTimestamp.current = windowTimestamp
-          break // Process one window per update
-        }
-      }
+    if (windowData.length === fftSize) {
+      // Use the timestamp of the middle of the window
+      const middleIndex = Math.floor(windowData.length / 2)
+      const windowTimestamp = windowData[middleIndex].timestamp.getTime()
+      
+      const samples = windowData.map(d => d.value)
+      processFFT(samples, windowTimestamp)
     }
   }, [data, fftSize, overlapRatio, processFFT])
 
@@ -182,21 +166,20 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     clearSVG(svg)
     ctx.clearRect(0, 0, innerWidth, innerHeight)
 
-    // Setup scales - Use same approach as Waveform for consistent time axis
-    const now = Date.now()
-    const startTime = now - timeWindow * 1000
-    
-    // Use linear scale with millisecond timestamps for consistency with Waveform
+    // Setup scales - Use data-driven approach for consistent time axis
     let timeDomain: [number, number]
     if (spectrogramData.length > 0) {
       const dataExtent = d3.extent(spectrogramData, d => d.timestamp) as [number, number]
-      // Use fixed time window to match Waveform behavior
-      timeDomain = [
-        Math.min(startTime, dataExtent[0]),
-        Math.max(now, dataExtent[1])
-      ]
+      const dataTimeWindow = timeWindow * 1000
+      const latestTime = dataExtent[1]
+      const startTime = latestTime - dataTimeWindow
+      
+      // Use data-based time window for consistency
+      timeDomain = [startTime, latestTime]
     } else {
-      timeDomain = [startTime, now]
+      // Fallback to current time if no data
+      const now = Date.now()
+      timeDomain = [now - timeWindow * 1000, now]
     }
     
     const xScale = d3.scaleLinear()

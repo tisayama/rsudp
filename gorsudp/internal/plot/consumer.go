@@ -11,6 +11,7 @@ import (
 	"github.com/tisayama/gorsudp/internal/broker"
 	"github.com/tisayama/gorsudp/internal/screenshot"
 	"github.com/tisayama/gorsudp/pkg/config"
+	"github.com/tisayama/gorsudp/pkg/dsp"
 	"github.com/tisayama/gorsudp/pkg/stream"
 )
 
@@ -22,6 +23,7 @@ type PlotConsumer struct {
 	stream        *stream.Stream
 	channelFilter []string
 	screenshotMgr *screenshot.ScreenshotManager
+	filters       map[string]*dsp.ButterworthFilter
 
 	// Data buffering
 	dataBuffer      []PlotData
@@ -81,6 +83,7 @@ func NewPlotConsumer(cfg config.Plot) (*PlotConsumer, error) {
 		channelFilter:  cfg.Channels,
 		dataBuffer:     make([]PlotData, 0, 100), // Pre-allocate buffer
 		bufferStopChan: make(chan bool),
+		filters:        make(map[string]*dsp.ButterworthFilter),
 	}
 
 	// Initialize screenshot manager if eq_screenshots is enabled
@@ -220,6 +223,24 @@ func (c *PlotConsumer) processData(event broker.Event) error {
 		SampleRate:       sampleRate,
 		Units:            c.getUnits(packet.Channel),
 		SampleTimestamps: sampleTimestamps,
+	}
+
+	// Apply detrend (remove DC offset) similar to Python implementation
+	plotData.Samples = dsp.RemoveDCOffset(plotData.Samples)
+
+	if c.config.FilterWaveform {
+		if _, ok := c.filters[packet.Channel]; !ok {
+			filter, err := dsp.NewButterworthFilter(dsp.FilterBandpass, c.config.FilterCorners, c.config.FilterHighpass, c.config.FilterLowpass, 100.0)
+			if err != nil {
+				log.Printf("failed to create filter for channel %s: %v", packet.Channel, err)
+			} else {
+				c.filters[packet.Channel] = filter
+			}
+		}
+		if filter, ok := c.filters[packet.Channel]; ok {
+			// Use zero-phase filtering like ObsPy
+			plotData.Samples = filter.ApplyZeroPhase(plotData.Samples)
+		}
 	}
 
 	// Send directly to plot server (reverted from buffering)

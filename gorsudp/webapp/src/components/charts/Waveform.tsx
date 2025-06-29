@@ -123,7 +123,8 @@ export const Waveform: React.FC<WaveformProps> = ({
     // Remove DC component and convert units
     const processedData = removeDC(windowedData).map(d => ({
       ...d,
-      value: units === 'nm/s' ? nanometersToMicrometers(d.value) : d.value
+      // Convert m/s to μm/s (multiply by 1e6) for better visualization
+      value: d.value * 1e6
     }))
 
     // Setup scales - Use linear scale with millisecond timestamps for better precision
@@ -152,8 +153,8 @@ export const Waveform: React.FC<WaveformProps> = ({
     if (autoScale) {
       yDomain = getDataRange(processedData, 0.1)
     } else {
-      // Fixed scale based on typical seismic data range in μm/s
-      yDomain = [-100, 100]
+      // Fixed scale based on typical seismic data range in μm/s (converted from m/s)
+      yDomain = [-10, 10]
     }
 
     const yScale = d3.scaleLinear()

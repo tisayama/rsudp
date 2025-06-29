@@ -152,7 +152,8 @@ export default function Home() {
   }, [connectionStatus])
 
   const channelList = getChannelList()
-  const currentChannelData = activeChannel ? getChannelData(activeChannel) : []
+  // Force re-render when channel data updates by including channels in dependency
+  const currentChannelData = activeChannel ? channels.get(activeChannel)?.data || [] : []
   const { chartWidth, chartHeight, isMobile } = useChartDimensions()
 
   return (

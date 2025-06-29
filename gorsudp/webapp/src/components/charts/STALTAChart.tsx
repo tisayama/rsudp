@@ -50,17 +50,20 @@ export const STALTAChart: React.FC<STALTAChartProps> = ({
       .attr('height', height)
       .attr('viewBox', `0 0 ${width} ${height}`)
 
-    // Setup time domain - show last timeWindow seconds
-    const now = Date.now()
-    const startTime = now - timeWindow * 1000
-    
-    // Filter data to time window
-    const windowedData = data.filter(d => d.timestamp.getTime() >= startTime)
+    // Filter data to time window using data-driven approach
+    const windowedData = data.length > 0 
+      ? data.filter(d => {
+          const latestTime = data[data.length - 1].timestamp
+          const cutoffTime = new Date(latestTime.getTime() - timeWindow * 1000)
+          return d.timestamp >= cutoffTime
+        })
+      : []
     
     if (windowedData.length === 0) return
 
-    // Setup scales
-    const timeDomain: [number, number] = [startTime, now]
+    // Setup time domain based on actual data
+    const timeExtent = d3.extent(windowedData, d => d.timestamp.getTime()) as [number, number]
+    const timeDomain: [number, number] = timeExtent
     
     const xScale = d3.scaleLinear()
       .domain(timeDomain)
