@@ -10,7 +10,8 @@ import {
   clearSVG, 
   createGroup, 
   createLinearAxis,
-  createGridLines
+  createGridLines,
+  seismicTheme
 } from '@/utils/d3-utils'
 
 interface STALTAChartProps {
@@ -95,10 +96,14 @@ export const STALTAChart: React.FC<STALTAChartProps> = ({
         .attr('opacity', 0.5)
     }
 
-    // Create grid lines
+    // Create grid lines with seismic theme colors
     if (showGrid) {
-      createGridLines(mainGroup, xScale, { width: innerWidth, height: innerHeight }, 'vertical')
-      createGridLines(mainGroup, yScale, { width: innerWidth, height: innerHeight }, 'horizontal')
+      const verticalGrid = createGridLines(mainGroup, xScale, { width: innerWidth, height: innerHeight }, 'vertical')
+      const horizontalGrid = createGridLines(mainGroup, yScale, { width: innerWidth, height: innerHeight }, 'horizontal')
+      
+      // Apply seismic theme colors
+      verticalGrid.attr('stroke', seismicTheme.gridColor)
+      horizontalGrid.attr('stroke', seismicTheme.gridColor)
     }
 
     // Draw threshold line
@@ -106,7 +111,7 @@ export const STALTAChart: React.FC<STALTAChartProps> = ({
       const threshold = windowedData[0].threshold
       const reset = windowedData[0].reset
 
-      // Threshold line (red)
+      // Threshold line (alert color)
       mainGroup
         .append('line')
         .attr('class', 'threshold-line')
@@ -114,11 +119,11 @@ export const STALTAChart: React.FC<STALTAChartProps> = ({
         .attr('x2', innerWidth)
         .attr('y1', yScale(threshold))
         .attr('y2', yScale(threshold))
-        .attr('stroke', '#dc3545')
+        .attr('stroke', seismicTheme.alertColor)
         .attr('stroke-width', 2)
         .attr('stroke-dasharray', '5,5')
 
-      // Reset line (orange)
+      // Reset line (reset color)
       mainGroup
         .append('line')
         .attr('class', 'reset-line')
@@ -126,7 +131,7 @@ export const STALTAChart: React.FC<STALTAChartProps> = ({
         .attr('x2', innerWidth)
         .attr('y1', yScale(reset))
         .attr('y2', yScale(reset))
-        .attr('stroke', '#fd7e14')
+        .attr('stroke', seismicTheme.resetColor)
         .attr('stroke-width', 1)
         .attr('stroke-dasharray', '3,3')
 
@@ -138,7 +143,7 @@ export const STALTAChart: React.FC<STALTAChartProps> = ({
         .attr('y', yScale(threshold) - 5)
         .attr('text-anchor', 'end')
         .style('font-size', '11px')
-        .style('fill', '#dc3545')
+        .style('fill', seismicTheme.alertColor)
         .style('font-weight', 'bold')
         .text(`Threshold: ${threshold.toFixed(2)}`)
 
@@ -150,7 +155,7 @@ export const STALTAChart: React.FC<STALTAChartProps> = ({
         .attr('y', yScale(reset) - 5)
         .attr('text-anchor', 'end')
         .style('font-size', '10px')
-        .style('fill', '#fd7e14')
+        .style('fill', seismicTheme.resetColor)
         .text(`Reset: ${reset.toFixed(2)}`)
     }
 
@@ -166,7 +171,7 @@ export const STALTAChart: React.FC<STALTAChartProps> = ({
       .datum(windowedData)
       .attr('class', 'stalta-ratio-line')
       .attr('fill', 'none')
-      .attr('stroke', isTriggered ? '#dc3545' : '#007bff')
+      .attr('stroke', isTriggered ? seismicTheme.alertColor : seismicTheme.waveformColor)
       .attr('stroke-width', 2)
       .attr('d', ratioLine)
 
@@ -180,7 +185,7 @@ export const STALTAChart: React.FC<STALTAChartProps> = ({
       .attr('cx', d => xScale(d.timestamp.getTime()))
       .attr('cy', d => yScale(d.ratio))
       .attr('r', d => d.triggered ? 4 : 2)
-      .attr('fill', d => d.triggered ? '#dc3545' : '#007bff')
+      .attr('fill', d => d.triggered ? seismicTheme.alertColor : seismicTheme.waveformColor)
       .attr('opacity', 0.8)
 
     // Create axes
@@ -214,7 +219,7 @@ export const STALTAChart: React.FC<STALTAChartProps> = ({
       .attr('dy', '1em')
       .style('text-anchor', 'middle')
       .style('font-size', '12px')
-      .style('fill', '#666')
+      .style('fill', seismicTheme.foreground)
       .text('STA/LTA Ratio')
 
     mainGroup
@@ -223,7 +228,7 @@ export const STALTAChart: React.FC<STALTAChartProps> = ({
       .attr('transform', `translate(${innerWidth / 2}, ${innerHeight + margin.bottom})`)
       .style('text-anchor', 'middle')
       .style('font-size', '12px')
-      .style('fill', '#666')
+      .style('fill', seismicTheme.foreground)
       .text('Time')
 
   }, [data, width, height, timeWindow, showGrid, isTriggered])

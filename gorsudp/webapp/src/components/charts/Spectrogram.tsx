@@ -13,7 +13,8 @@ import {
   createLinearAxis,
   createGridLines,
   getTimeWindow,
-  getColorScale
+  getColorScale,
+  seismicTheme
 } from '@/utils/d3-utils'
 
 interface SpectrogramProps {
@@ -46,8 +47,8 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
   channel,
   width,
   height,
-  fftSize = 256,
-  overlapRatio = 0.875,
+  fftSize = 128,  // Match Python: nearest_pow_2(100) = 128
+  overlapRatio = 0.975,  // Match Python's high overlap for better time resolution
   frequencyRange,
   timeWindow = 120,
   colorScale = 'inferno',
@@ -127,17 +128,21 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     // Calculate step size based on overlap
     const stepSize = Math.floor(fftSize * (1 - overlapRatio))
     
-    // Process the most recent complete window
-    const startIdx = Math.max(0, data.length - fftSize)
-    const windowData = data.slice(startIdx, startIdx + fftSize)
+    // Process multiple overlapping windows for better time resolution
+    const numWindows = Math.min(3, Math.floor((data.length - fftSize) / stepSize) + 1)
     
-    if (windowData.length === fftSize) {
-      // Use the timestamp of the middle of the window
-      const middleIndex = Math.floor(windowData.length / 2)
-      const windowTimestamp = windowData[middleIndex].timestamp.getTime()
+    for (let i = 0; i < numWindows; i++) {
+      const startIdx = Math.max(0, data.length - fftSize - (i * stepSize))
+      const windowData = data.slice(startIdx, startIdx + fftSize)
       
-      const samples = windowData.map(d => d.value)
-      processFFT(samples, windowTimestamp)
+      if (windowData.length === fftSize) {
+        // Use the timestamp of the middle of the window
+        const middleIndex = Math.floor(windowData.length / 2)
+        const windowTimestamp = windowData[middleIndex].timestamp.getTime()
+        
+        const samples = windowData.map(d => d.value)
+        processFFT(samples, windowTimestamp)
+      }
     }
   }, [data, fftSize, overlapRatio, processFFT])
 
@@ -194,8 +199,10 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     const colorScaleFunc = getColorScale(colorScale)
       .domain([0, 1])
 
-    // Draw spectrogram on Canvas
-    const rectWidth = Math.max(1, innerWidth / spectrogramData.length)
+    // Draw spectrogram on Canvas - ensure adequate temporal coverage
+    const timeSpan = timeDomain[1] - timeDomain[0]
+    const avgTimeStep = spectrogramData.length > 1 ? timeSpan / (spectrogramData.length - 1) : timeSpan
+    const rectWidth = Math.max(2, (avgTimeStep / timeSpan) * innerWidth * 1.2) // 20% overlap for smooth coverage
     
     spectrogramData.forEach((columnData) => {
       const x = xScale(columnData.timestamp)
@@ -222,10 +229,14 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     // Create SVG overlay for axes and labels
     const mainGroup = createGroup(svg, 'main-group', `translate(${margin.left},${margin.top})`)
 
-    // Create grid lines
+    // Create grid lines with seismic theme colors
     if (showGrid) {
-      createGridLines(mainGroup, xScale, { width: innerWidth, height: innerHeight }, 'vertical')
-      createGridLines(mainGroup, yScale, { width: innerWidth, height: innerHeight }, 'horizontal')
+      const verticalGrid = createGridLines(mainGroup, xScale, { width: innerWidth, height: innerHeight }, 'vertical')
+      const horizontalGrid = createGridLines(mainGroup, yScale, { width: innerWidth, height: innerHeight }, 'horizontal')
+      
+      // Apply seismic theme colors
+      verticalGrid.attr('stroke', seismicTheme.gridColor)
+      horizontalGrid.attr('stroke', seismicTheme.gridColor)
     }
 
     // Create axes - Use custom formatter for linear scale
@@ -237,17 +248,25 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
     const yAxis = createLinearAxis(yScale, 'left')
 
     // Add X axis
-    mainGroup
+    const xAxisGroup = mainGroup
       .append('g')
       .attr('class', 'x-axis')
       .attr('transform', `translate(0,${innerHeight})`)
       .call(xAxis)
+    
+    // Style axis text with seismic theme
+    xAxisGroup.selectAll('text')
+      .style('fill', seismicTheme.foreground)
 
     // Add Y axis
-    mainGroup
+    const yAxisGroup = mainGroup
       .append('g')
       .attr('class', 'y-axis')
       .call(yAxis)
+    
+    // Style axis text with seismic theme
+    yAxisGroup.selectAll('text')
+      .style('fill', seismicTheme.foreground)
 
     // Add axis labels
     mainGroup
@@ -259,7 +278,7 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
       .attr('dy', '1em')
       .style('text-anchor', 'middle')
       .style('font-size', '12px')
-      .style('fill', '#666')
+      .style('fill', seismicTheme.foreground)
       .text('Frequency (Hz)')
 
     mainGroup
@@ -268,7 +287,7 @@ export const Spectrogram: React.FC<SpectrogramProps> = ({
       .attr('transform', `translate(${innerWidth / 2}, ${innerHeight + margin.bottom})`)
       .style('text-anchor', 'middle')
       .style('font-size', '12px')
-      .style('fill', '#666')
+      .style('fill', seismicTheme.foreground)
       .text('Time')
 
   }, [spectrogramData, width, height, frequencyRange, colorScale, showGrid, timeWindow])

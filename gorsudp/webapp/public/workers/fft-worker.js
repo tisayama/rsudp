@@ -1,15 +1,23 @@
 // FFT Web Worker for spectrogram processing
 // This worker handles computationally intensive FFT calculations off the main thread
 
-// Simple FFT implementation
-function fft(signal) {
+// Enhanced FFT implementation with configurable zero-padding
+function fft(signal, padTo = null) {
   const N = signal.length;
   if (N <= 1) return signal.map(x => ({ real: x, imag: 0 }));
   
-  // Ensure power of 2
-  const nextPow2 = Math.pow(2, Math.ceil(Math.log2(N)));
+  // Determine target size for zero-padding
+  let targetSize;
+  if (padTo && padTo > N) {
+    // Use specified pad_to size (matches Python's pad_to parameter)
+    targetSize = Math.pow(2, Math.ceil(Math.log2(padTo)));
+  } else {
+    // Default: ensure power of 2
+    targetSize = Math.pow(2, Math.ceil(Math.log2(N)));
+  }
+  
   const paddedSignal = [...signal];
-  while (paddedSignal.length < nextPow2) {
+  while (paddedSignal.length < targetSize) {
     paddedSignal.push(0);
   }
   
@@ -90,9 +98,11 @@ function calculatePowerSpectrum(fftResult, sampleRate, frequencyRange) {
     
     if (frequency >= minFreq && frequency <= maxFreq) {
       const magnitude = fftResult[k].real * fftResult[k].real + fftResult[k].imag * fftResult[k].imag;
-      // Use amplitude (sqrt of power spectral density) for better visibility
-      const amplitude = Math.sqrt(magnitude) / N;
-      const power = amplitude; // Use amplitude directly for now
+      // Calculate power spectral density
+      const psd = magnitude / (N * N);
+      // Apply Python-style power scaling: 10th root (matches Python's sg**(1/10))
+      // This provides more aggressive compression for better visual detail in low-power regions
+      const power = Math.pow(psd, 1/10);
       
       result.push({
         frequency: frequency,
@@ -114,7 +124,9 @@ function normalizePowers(powers) {
   const range = maxPower - minPower;
   
   if (range === 0) {
-    return powers.map(p => ({ ...p, normalizedPower: 0 }));
+    // When all powers are the same, return a moderate value (0.5) instead of 0
+    // This prevents the spectrogram from being completely white
+    return powers.map(p => ({ ...p, normalizedPower: 0.5 }));
   }
   
   return powers.map(p => ({
@@ -140,14 +152,35 @@ self.onmessage = function(e) {
     const window = hanningWindow(fftSize);
     const windowedSamples = applyWindow(inputSamples, window);
     
-    // Compute FFT
-    const fftResult = fft(windowedSamples);
+    // Compute FFT with zero-padding for better frequency resolution (matches Python's pad_to)
+    const padTo = fftSize * 4;  // Match Python's pad_to=nfft*4 for interpolation
+    const fftResult = fft(windowedSamples, padTo);
     
     // Calculate power spectrum
     const powerSpectrum = calculatePowerSpectrum(fftResult, sampleRate, frequencyRange);
     
     // Normalize powers
     const normalizedSpectrum = normalizePowers(powerSpectrum);
+    
+    // Debug logging for troubleshooting (can be removed once issue is resolved)
+    if (powerSpectrum.length > 0) {
+      const powers = powerSpectrum.map(p => p.power);
+      const minPower = Math.min(...powers);
+      const maxPower = Math.max(...powers);
+      const normalizedPowers = normalizedSpectrum.map(p => p.normalizedPower);
+      const minNormalized = Math.min(...normalizedPowers);
+      const maxNormalized = Math.max(...normalizedPowers);
+      
+      // Only log if there might be an issue (low dynamic range)
+      if (maxPower - minPower < 1e-10 || (minNormalized === maxNormalized && minNormalized === 0.5)) {
+        console.debug('FFT Worker: Low dynamic range detected', {
+          sampleCount: samples.length,
+          powerRange: { min: minPower, max: maxPower, range: maxPower - minPower },
+          normalizedRange: { min: minNormalized, max: maxNormalized },
+          sampleRange: { min: Math.min(...samples), max: Math.max(...samples) }
+        });
+      }
+    }
     
     // Prepare result
     const result = {

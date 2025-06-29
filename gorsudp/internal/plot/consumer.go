@@ -215,11 +215,33 @@ func (c *PlotConsumer) processData(event broker.Event) error {
 		sampleTimestamps[i] = baseTimestamp.Add(time.Duration(i) * sampleInterval)
 	}
 
+	// Apply proper deconvolution: convert raw counts to physical units
+	// Based on Python rsudp investigation:
+	// - Geophone channels use sensitivity of 1.6e8 counts/(m/s)
+	// - Accelerometer channels use sensitivity of 4.2e8 counts/(m/s²)
+	physicalSamples := make([]float64, len(samples))
+	for i, sample := range samples {
+		// Apply correct sensitivity based on channel type
+		if strings.Contains(packet.Channel, "EH") || strings.Contains(packet.Channel, "SH") {
+			// ジオフォン (EHZ, EHN, EHE, SHZ): 1.6e8 counts/(m/s)
+			physicalSamples[i] = sample / 1.6e8
+		} else if strings.Contains(packet.Channel, "EN") {
+			// 加速度計 (ENZ, ENN, ENE): 4.2e8 counts/(m/s²)
+			physicalSamples[i] = sample / 4.2e8
+		} else if strings.Contains(packet.Channel, "HDF") {
+			// 圧力センサー: 1.0e5 counts/Pa (仮定値)
+			physicalSamples[i] = sample / 1.0e5
+		} else {
+			// その他のチャンネル: raw counts (変換なし)
+			physicalSamples[i] = sample
+		}
+	}
+
 	// Convert to plot data format
 	plotData := PlotData{
 		Channel:          packet.Channel,
 		Timestamp:        baseTimestamp,
-		Samples:          samples,
+		Samples:          physicalSamples,
 		SampleRate:       sampleRate,
 		Units:            c.getUnits(packet.Channel),
 		SampleTimestamps: sampleTimestamps,

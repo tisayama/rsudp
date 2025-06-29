@@ -355,15 +355,25 @@ func (c *AlertConsumer) processSeismicData(packet *shakenet.UDPPacket) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	// Convert int32 data to float64
+	// Convert int32 data to float64 - use raw counts for STA/LTA (matches Python implementation)
+	// Python default: deconvolve=False, so STA/LTA processes raw counts directly
 	data := make([]float64, len(packet.Data))
 	for i, sample := range packet.Data {
 		data[i] = float64(sample)
 	}
 
-	// Apply filter if configured
+	// Debug logging for first few samples
+	if c.totalSamples < 100 && len(data) > 0 {
+		log.Printf("DEBUG: Using raw counts for STA/LTA (Python style): [%v, %v, %v]",
+			packet.Data[0], packet.Data[1], packet.Data[2])
+	}
+
+	// Apply detrend (remove DC offset) before filtering - same as plot consumer
+	data = dsp.RemoveDCOffset(data)
+
+	// Apply filter if configured using zero-phase filtering - same as plot consumer
 	if c.filter != nil {
-		data = c.filter.ApplySlice(data)
+		data = c.filter.ApplyZeroPhase(data)
 	}
 
 	// Process each sample through STA/LTA

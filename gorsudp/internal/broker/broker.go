@@ -112,7 +112,6 @@ type EventMetrics struct {
 	DroppedEvents  int64
 	ConsumerErrors int64
 	LastEventTime  time.Time
-	mutex          sync.RWMutex
 }
 
 // NewMessageBroker creates a new message broker with the specified queue size

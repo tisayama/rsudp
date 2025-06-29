@@ -17,6 +17,52 @@ export const timeFormatDetailed = d3.timeFormat('%H:%M:%S.%L')
 export const numberFormat = d3.format('.2f')
 export const scientificFormat = d3.format('.2e')
 
+// Engineering notation formatter for seismic data (in m/s)
+export const engineeringFormat = (value: number): string => {
+  if (value === 0) return '0'
+  
+  const absValue = Math.abs(value)
+  
+  // Format based on magnitude - Python EngFormatter style
+  if (absValue >= 1e-3) {
+    // Values >= 1 mm/s: show in m/s
+    const scaledValue = value
+    return scaledValue.toFixed(scaledValue >= 0.01 ? 2 : 3)
+  } else if (absValue >= 1e-6) {
+    // Values >= 1 μm/s: show in mm/s 
+    const scaledValue = value * 1e3
+    return `${scaledValue.toFixed(scaledValue >= 10 ? 1 : 2)}m`
+  } else if (absValue >= 1e-9) {
+    // Values >= 1 nm/s: show in μm/s
+    const scaledValue = value * 1e6
+    return `${scaledValue.toFixed(scaledValue >= 10 ? 1 : 2)}μ`
+  } else {
+    // Very small values: show in nm/s
+    const scaledValue = value * 1e9
+    return `${scaledValue.toFixed(scaledValue >= 10 ? 1 : 2)}n`
+  }
+}
+
+// Determine optimal unit for waveform display based on data range
+// Go backend already provides data in m/s, so we only determine display unit label
+export const determineOptimalUnit = (dataRange: [number, number]): { unit: string, factor: number } => {
+  const maxAbsValue = Math.max(Math.abs(dataRange[0]), Math.abs(dataRange[1]))
+  
+  // Data is already in m/s from Go backend - no additional scaling needed
+  if (maxAbsValue < 1e-6) {
+    return { unit: 'nm/s', factor: 1 }  // Display as nm/s, but don't scale data
+  } else if (maxAbsValue < 1e-3) {
+    return { unit: 'μm/s', factor: 1 }  // Display as μm/s, but don't scale data
+  } else {
+    return { unit: 'm/s', factor: 1 }   // Display as m/s
+  }
+}
+
+// Create engineering formatter for axis (without unit in ticks)
+export const createEngineeringTickFormat = () => {
+  return (d: number) => engineeringFormat(d)
+}
+
 // Color scales for different chart types
 export const categoricalColors = d3.scaleOrdinal(d3.schemeCategory10)
 
@@ -39,6 +85,17 @@ export const getColorScale = (scaleName: string) => {
     default:
       return viridisColorScale
   }
+}
+
+// Seismic color theme matching Python implementation
+export const seismicTheme = {
+  background: '#202530',     // Dark blue-gray background (Python: self.bgcolor)
+  foreground: '#cccccc',     // Light gray text/axes (Python: self.fgcolor = '0.8')
+  waveformColor: '#c28285',  // Pinkish-red for waveforms (Python: self.linecolor)
+  gridColor: '#e0e0e0',      // Light gray for grid lines
+  zeroLineColor: '#666666',  // Medium gray for zero line
+  alertColor: '#ff6b6b',     // Red for alerts
+  resetColor: '#4ecdc4'      // Teal for resets
 }
 
 // Utility functions for data processing
@@ -132,6 +189,18 @@ export const createLinearAxis = (
 ) => {
   const axis = position === 'left' ? d3.axisLeft(scale) : d3.axisRight(scale)
   return axis.tickFormat(numberFormat)
+}
+
+// Create linear axis with engineering notation (for seismic data)
+export const createSeismicLinearAxis = (
+  scale: d3.ScaleLinear<number, number>,
+  position: 'left' | 'right' = 'left'
+) => {
+  const axis = position === 'left' ? d3.axisLeft(scale) : d3.axisRight(scale)
+  return axis.tickFormat((domainValue: d3.NumberValue) => {
+    const numValue = typeof domainValue === 'number' ? domainValue : domainValue.valueOf()
+    return engineeringFormat(numValue)
+  })
 }
 
 // Grid line utilities

@@ -101,6 +101,79 @@ cd gorsudp/gorsudp
 ```
 - `http://localhost:8080` で API と静的ファイルの両方を配信
 
+## 重要な開発方針
+
+### WaveformとSpectrogramの表示に関する方針
+- **Python実装の表示が正しい基準**: Go実装はPython rsudp実装の表示結果に合わせること
+- **勝手な軸ラベルや単位の変更禁止**: Velocity軸、Amplitude軸などのラベルはPython実装に従う
+- **単位変換の正確性**: Python実装の計算結果をそのまま再現すること
+- **異常な値のスケーリング**: 10^16や10^18といった異常なスケーリングは避け、Python実装の値範囲に合わせる
+- **STA/LTA値への影響**: 誤った単位変換がSTA/LTA計算やアラート誤発報の原因となるため、Python実装との整合性を最優先とする
+
+### データ処理の基本方針
+- **Deconvolution**: Python実装はデフォルトで`deconvolve=False`（raw counts使用）
+- **Alert STA/LTA**: raw countsで処理（Python準拠、デコンボリューション前の値を使用）
+- **Plot表示**: デコンボリューション後の物理単位(m/s, m/s²)で表示
+- **フィルタリング**: Python実装はデフォルトでwaveform filtering無効、Go実装は設定に依存
+
+### Gitコミットに関する方針
+- **勝手なコミット禁止**: ユーザーが明示的に指示するまでgit commitを実行してはならない
+- **変更前の確認**: 軸ラベルや単位の変更は必ずユーザーに確認を取ること
+
+## 重要な技術仕様 - Python実装との整合性
+
+### 1. Waveform表示の技術仕様
+
+**データ処理フロー**:
+1. Go Backend: UDP packet → デコンボリューション (`/1.6e8` for geophone) → m/s単位
+2. Frontend: エンジニアリング記法フォーマッター適用（スケーリングなし）
+3. 軸表示: Python準拠のエンジニアリング記法（例: `2.5μ`, `100n`）
+
+**重要な注意点**:
+- **ダブルスケーリング禁止**: Backend（デコンボリューション）とFrontend（表示用スケーリング）の両方を適用してはならない
+- **単位の自動切り替え**: データ範囲に応じてnm/s、μm/s、m/sを自動選択（ラベルのみ、データはm/s固定）
+- **軸目盛り**: 単位なしの数値のみ表示、単位は軸ラベルに記載
+
+### 2. Spectrogram表示の技術仕様
+
+**Python matplotlib準拠パラメータ**:
+- **FFTサイズ**: 128（Python: `nearest_pow_2(100)`）
+- **オーバーラップ**: 97.5%（Python: `per_lap = 0.975`）
+- **パワースケーリング**: 10乗根（Python: `sg**(1/10)`）
+- **ゼロパディング**: FFTサイズの4倍（Python: `pad_to=nfft*4`）
+- **カラーマップ**: 'inferno'（Python準拠）
+
+**重要な注意点**:
+- FFTサイズが大きすぎると時間解像度が悪化
+- パワースケーリングが異なると視覚的コントラストが大きく変わる
+- オーバーラップ率が低いと時間軸の変化が粗くなる
+
+### 3. STA/LTA処理の技術仕様
+
+**Python ObsPy準拠の実装**:
+- **入力データ**: raw counts（デコンボリューション前、Python: `deconvolve=False`）
+- **アルゴリズム**: recursive STA/LTA with energy-based calculation
+- **値の範囲**: 0.09-0.5（正常）、>3.95（アラート）
+- **設定値**: STA=6s, LTA=30s, threshold=3.95, reset=0.9
+
+**重要な注意点**:
+- デコンボリューション後の値をSTA/LTAに入力すると10倍程度の差が生じる
+- Python実装は`deconvolve=False`がデフォルトのため、raw countsで処理している
+- 感度の異なるチャンネル（ジオフォン vs 加速度計）でも同じraw countsを使用
+
+### 4. データフロー設計
+
+```
+UDP Packet (raw counts)
+├─ Alert Consumer: raw counts → STA/LTA → アラート判定
+└─ Plot Consumer: raw counts → デコンボリューション → 物理単位 → 表示
+```
+
+**この設計により**:
+- STA/LTA値がPython実装と一致
+- 表示は適切な物理単位
+- アラートの感度がPython実装と同等
+
 ## 開発・コミット時の必須事項
 
 ### Go 側の開発ルール
@@ -138,6 +211,23 @@ npm run build         # 本番ビルド確認
   - 依存関係の追加・更新は `npm install` コマンドまたは `package.json` 経由で行う
   - `package-lock.json` の変更は慎重に確認し、不要な変更は避ける
 
+## 今後の開発における注意事項
+
+### Python実装との互換性維持
+- 新機能追加時は必ずPython rsudp実装の動作を調査・比較する
+- 表示系の変更は特に慎重に行い、Python実装の見た目・数値と一致させる
+- 設定パラメータの変更時はPython実装のデフォルト値を確認する
+
+### パフォーマンス考慮事項
+- FFT処理はWeb Workerで実行し、メインスレッドをブロックしない
+- Spectrogramの時間解像度とFFTサイズはトレードオフ関係にある
+- リアルタイム性を重視し、過度な精度向上は避ける
+
+### セキュリティ考慮事項
+- UDP受信は信頼できるRaspberry Shakeデバイスからのみ
+- Web インターフェースは内部ネットワーク用途を想定
+- 機密情報（設定、ログ）の外部流出防止
+
 ### 共通ルール
 
 **コミットメッセージ**:
@@ -152,4 +242,51 @@ npm run build         # 本番ビルド確認
 **ファイル管理**:
 - 一時ファイル・ビルド成果物のコミット禁止
 - `.gitignore` の適切な設定維持
+
+## トラブルシューティング
+
+### よくある問題と解決方法
+
+#### 1. Waveform軸の数値が異常に大きい（10^18倍等）
+**原因**: ダブルスケーリング（Backend + Frontend両方でスケーリング適用）
+**解決方法**: 
+- Backendでデコンボリューション適用済みの場合、Frontendでの追加スケーリングを削除
+- `determineOptimalUnit`で`factor=1`を設定し、表示用スケーリングを無効化
+
+#### 2. STA/LTA値がPython実装と10倍異なる
+**原因**: デコンボリューション有無の違い
+**解決方法**:
+- Alert ConsumerではSTA/LTA処理前にデコンボリューションを削除
+- raw countsを直接STA/LTA処理に入力（Python `deconvolve=False`準拠）
+
+#### 3. Spectrogramが真っ白または視覚的に大きく異なる
+**原因**: FFTパラメータまたはパワースケーリングの違い
+**解決方法**:
+- FFTサイズを128に設定（Python準拠）
+- パワースケーリングを10乗根に変更（`Math.pow(psd, 1/10)`）
+- オーバーラップ率を97.5%に設定
+
+#### 4. 軸ラベルや目盛りが読みにくい
+**原因**: エンジニアリング記法の未適用またはカラーテーマの問題
+**解決方法**:
+- `seismicTheme`を適用して適切な色設定
+- エンジニアリング記法フォーマッター（`engineeringFormat`）を使用
+- 軸ラベルは中央配置、目盛りは数値のみ表示
+
+### デバッグ時の確認ポイント
+
+1. **データの値範囲確認**:
+   - raw counts: 10,000-50,000程度
+   - deconvolved: 1e-7 to 1e-4 m/s程度
+   - STA/LTA: 0.09-0.5（正常）、>3.95（アラート）
+
+2. **設定ファイルの確認**:
+   - `alert.deconv`と`plot.deconv`の設定値
+   - Filter設定（`filter_waveform`, `filter_spectrogram`）
+   - STA/LTA閾値設定
+
+3. **ログ出力の確認**:
+   - デバッグログでraw counts値とdeconvolved値を確認
+   - STA/LTA比率の値をPython実装と比較
+   - FFT処理エラーやWeb Worker例外をチェック
 

@@ -312,19 +312,19 @@ func (f *ButterworthFilter) ApplyZeroPhase(input []float64) []float64 {
 	for i, sample := range input {
 		forward[i] = f.Apply(sample)
 	}
-	
+
 	// Second pass: backward filtering
 	output := make([]float64, len(input))
 	f.Reset() // Reset filter state
 	for i := len(forward) - 1; i >= 0; i-- {
 		output[i] = f.Apply(forward[i])
 	}
-	
+
 	// Reverse the output to get correct time order
 	for i, j := 0, len(output)-1; i < j; i, j = i+1, j-1 {
 		output[i], output[j] = output[j], output[i]
 	}
-	
+
 	return output
 }
 

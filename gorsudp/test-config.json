@@ -8,19 +8,19 @@
     "data_dir": "./data",
     "screenshot_dir": "./screenshots",
     "log_dir": "./logs",
-    "debug": false
+    "debug": true
   },
   "alert": {
     "enabled": true,
     "channel": "HZ",
-    "sta": 5,
+    "sta": 6,
     "lta": 30,
-    "threshold": 1.6,
-    "reset": 1.55,
-    "highpass": 0.8,
-    "lowpass": 9,
+    "threshold": 1.5,
+    "reset": 0.5,
+    "highpass": 0.7,
+    "lowpass": 6,
     "duration": 0,
-    "log_interval": 30,
+    "log_interval": 1,
     "deconv": "CHAN",
     "units": "CHAN"
   },

@@ -10,12 +10,13 @@ import {
   clearSVG, 
   createGroup, 
   createTimeAxis, 
-  createLinearAxis,
+  createSeismicLinearAxis,
   createGridLines,
   getTimeWindow,
   getDataRange,
   removeDC,
-  nanometersToMicrometers
+  seismicTheme,
+  determineOptimalUnit
 } from '@/utils/d3-utils'
 
 interface WaveformProps {
@@ -120,12 +121,14 @@ export const Waveform: React.FC<WaveformProps> = ({
     const windowedData = getTimeWindow(data, timeWindow)
     if (windowedData.length === 0) return
 
-    // Remove DC component and convert units
-    const processedData = removeDC(windowedData).map(d => ({
-      ...d,
-      // Convert m/s to μm/s (multiply by 1e6) for better visualization
-      value: d.value * 1e6
-    }))
+    // Remove DC component - data is already in m/s from Go backend
+    const processedData = removeDC(windowedData)
+    
+    if (processedData.length === 0) return
+    
+    // Determine optimal unit label based on data range (no scaling needed)
+    const dataRange = getDataRange(processedData, 0)
+    const { unit } = determineOptimalUnit(dataRange)
 
     // Setup scales - Use linear scale with millisecond timestamps for better precision
     // Always show a fixed time window even if data doesn't fill it completely
@@ -153,8 +156,8 @@ export const Waveform: React.FC<WaveformProps> = ({
     if (autoScale) {
       yDomain = getDataRange(processedData, 0.1)
     } else {
-      // Fixed scale based on typical seismic data range in μm/s (converted from m/s)
-      yDomain = [-10, 10]
+      // Fixed scale based on typical seismic data range in m/s
+      yDomain = [-1e-4, 1e-4]  // ±0.0001 m/s, typical range for seismic background noise
     }
 
     const yScale = d3.scaleLinear()
@@ -166,10 +169,14 @@ export const Waveform: React.FC<WaveformProps> = ({
     // Create main group
     const mainGroup = createGroup(svg, 'main-group', `translate(${margin.left},${margin.top})`)
 
-    // Create grid lines
+    // Create grid lines with seismic theme colors
     if (showGrid) {
-      createGridLines(mainGroup, xScale, { width: innerWidth, height: innerHeight }, 'vertical')
-      createGridLines(mainGroup, yScale, { width: innerWidth, height: innerHeight }, 'horizontal')
+      const verticalGrid = createGridLines(mainGroup, xScale, { width: innerWidth, height: innerHeight }, 'vertical')
+      const horizontalGrid = createGridLines(mainGroup, yScale, { width: innerWidth, height: innerHeight }, 'horizontal')
+      
+      // Apply seismic theme colors
+      verticalGrid.attr('stroke', seismicTheme.gridColor)
+      horizontalGrid.attr('stroke', seismicTheme.gridColor)
     }
 
     // Create axes
@@ -180,22 +187,30 @@ export const Waveform: React.FC<WaveformProps> = ({
         return d3.timeFormat('%H:%M:%S')(date)
       })
     
-    const yAxis = createLinearAxis(yScale, 'left')
+    const yAxis = createSeismicLinearAxis(yScale, 'left')
 
     // Add X axis
-    mainGroup
+    const xAxisGroup = mainGroup
       .append('g')
       .attr('class', 'x-axis')
       .attr('transform', `translate(0,${innerHeight})`)
       .call(xAxis)
+    
+    // Style axis text with seismic theme
+    xAxisGroup.selectAll('text')
+      .style('fill', seismicTheme.foreground)
 
     // Add Y axis
-    mainGroup
+    const yAxisGroup = mainGroup
       .append('g')
       .attr('class', 'y-axis')
       .call(yAxis)
+    
+    // Style axis text with seismic theme
+    yAxisGroup.selectAll('text')
+      .style('fill', seismicTheme.foreground)
 
-    // Add axis labels
+    // Add axis labels with seismic theme colors
     mainGroup
       .append('text')
       .attr('class', 'axis-label')
@@ -205,8 +220,8 @@ export const Waveform: React.FC<WaveformProps> = ({
       .attr('dy', '1em')
       .style('text-anchor', 'middle')
       .style('font-size', '12px')
-      .style('fill', '#666')
-      .text('Velocity (μm/s)')
+      .style('fill', seismicTheme.foreground)
+      .text(`Velocity (${unit})`)
 
     mainGroup
       .append('text')
@@ -214,10 +229,10 @@ export const Waveform: React.FC<WaveformProps> = ({
       .attr('transform', `translate(${innerWidth / 2}, ${innerHeight + margin.bottom})`)
       .style('text-anchor', 'middle')
       .style('font-size', '12px')
-      .style('fill', '#666')
+      .style('fill', seismicTheme.foreground)
       .text('Time')
 
-    // Use processed data directly (filtering was done in processing step)
+    // Use processed data directly (already in correct m/s units)
     const validData = processedData
     
     // Create line generator (remove .defined() to prevent unwanted connections)
@@ -234,12 +249,12 @@ export const Waveform: React.FC<WaveformProps> = ({
       .datum(validData)
       .attr('class', 'waveform-path')
       .attr('fill', 'none')
-      .attr('stroke', '#1f77b4')
+      .attr('stroke', seismicTheme.waveformColor)
       .attr('stroke-width', 1.5)
       .attr('d', pathData)
     
 
-    // Add zero line
+    // Add zero line with seismic theme colors
     mainGroup
       .append('line')
       .attr('class', 'zero-line')
@@ -247,7 +262,7 @@ export const Waveform: React.FC<WaveformProps> = ({
       .attr('x2', innerWidth)
       .attr('y1', yScale(0))
       .attr('y2', yScale(0))
-      .attr('stroke', '#666')
+      .attr('stroke', seismicTheme.zeroLineColor)
       .attr('stroke-width', 1)
       .attr('stroke-dasharray', '3,3')
       .attr('opacity', 0.5)
@@ -314,7 +329,7 @@ export const Waveform: React.FC<WaveformProps> = ({
         width={width}
         height={height}
         className="waveform-chart"
-        style={{ border: '1px solid #e0e0e0' }}
+        style={{ border: `1px solid ${seismicTheme.gridColor}`, backgroundColor: seismicTheme.background }}
       />
     </div>
   )
