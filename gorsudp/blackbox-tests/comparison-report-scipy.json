@@ -1,0 +1,71 @@
+{
+  "metadata": {
+    "comparison_timestamp": "2025-06-30T13:45:17.804419Z",
+    "python_implementation": {
+      "timestamp": "2025-06-30T13:45:07.725341Z",
+      "implementation": "python",
+      "config": {
+        "sta_duration": 6.0,
+        "lta_duration": 30.0,
+        "threshold": 3.95,
+        "reset": 0.9,
+        "sample_rate": 100.0,
+        "deconv": true,
+        "filter_enabled": true,
+        "highpass": 0.8,
+        "lowpass": 9.0,
+        "filter_corners": 2
+      },
+      "total_samples": 12000,
+      "trigger_count": 1
+    },
+    "go_implementation": {
+      "timestamp": "2025-06-30T13:45:07Z",
+      "implementation": "go",
+      "config": {
+        "sta_duration": 6,
+        "lta_duration": 30,
+        "threshold": 3.95,
+        "reset": 0.9,
+        "sample_rate": 100,
+        "deconv": true,
+        "filter_enabled": true,
+        "highpass": 0.8,
+        "lowpass": 9,
+        "filter_corners": 2
+      },
+      "total_samples": 12000,
+      "trigger_count": 1
+    }
+  },
+  "summary": {
+    "total_samples": 9000,
+    "max_sta_diff": 8.773773500063537e-10,
+    "max_lta_diff": 2.609431048659898e-10,
+    "max_ratio_diff": 0.6185127884716572,
+    "mean_ratio_diff": 0.008258560726204914,
+    "trigger_mismatches": 2,
+    "overall_pass": false
+  },
+  "detailed_statistics": {
+    "sta_diffs_min": 4.137623001830789e-15,
+    "sta_diffs_max": 8.773773500063537e-10,
+    "sta_diffs_mean": 1.069125067315491e-10,
+    "sta_diffs_std": 2.2525173477987162e-10,
+    "sta_diffs_median": 1.4162714662891694e-12,
+    "lta_diffs_min": 8.78305206445219e-15,
+    "lta_diffs_max": 2.609431048659898e-10,
+    "lta_diffs_mean": 9.123857093505714e-11,
+    "lta_diffs_std": 8.527042996785326e-11,
+    "lta_diffs_median": 7.574757178494014e-11,
+    "ratio_diffs_min": 2.3031831261621782e-07,
+    "ratio_diffs_max": 0.6185127884716572,
+    "ratio_diffs_mean": 0.008258560726204914,
+    "ratio_diffs_std": 0.028497451615381857,
+    "ratio_diffs_median": 0.000901194796434468
+  },
+  "tolerances": {
+    "ratio_tolerance": 0.01,
+    "trigger_tolerance": 0
+  }
+}

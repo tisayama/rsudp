@@ -100,7 +100,7 @@ func NewAlertConsumer(cfg config.Alert, messageBroker *broker.MessageBroker) (*A
 		Reset:        cfg.Reset,
 		SampleRate:   100.0, // Default sample rate, will be updated from data
 		UseRecursive: true,  // Use recursive for performance
-		EnergyBased:  true,  // Use energy-based calculation
+		EnergyBased:  true,  // Use energy-based calculation to match Python's ObsPy recursive_sta_lta default
 	}
 
 	var err error
@@ -355,23 +355,45 @@ func (c *AlertConsumer) processSeismicData(packet *shakenet.UDPPacket) error {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	// Convert int32 data to float64 - use raw counts for STA/LTA (matches Python implementation)
-	// Python default: deconvolve=False, so STA/LTA processes raw counts directly
+	// Convert int32 data to float64 and apply deconvolution if configured
+	// Python's behavior: applies deconvolution BEFORE STA/LTA when deconv is enabled
 	data := make([]float64, len(packet.Data))
-	for i, sample := range packet.Data {
-		data[i] = float64(sample)
+	
+	// Check deconv configuration to match Python behavior exactly
+	// Python default: deconv=False (use raw counts), but when deconv is enabled, deconvolve first
+	// "CHAN" means channel-specific deconvolution (which involves deconvolution)
+	shouldDeconvolve := c.config.Deconv != "" && c.config.Deconv != "false" && c.config.Deconv != "False"
+	if shouldDeconvolve {
+		// Apply deconvolution: convert raw counts to physical units before STA/LTA
+		for i, sample := range packet.Data {
+			// Apply correct sensitivity based on channel type
+			if strings.Contains(packet.Channel, "EH") || strings.Contains(packet.Channel, "SH") {
+				// ジオフォン (EHZ, EHN, EHE, SHZ): 1.6e8 counts/(m/s)
+				data[i] = float64(sample) / 1.6e8
+			} else if strings.Contains(packet.Channel, "EN") {
+				// 加速度計 (ENZ, ENN, ENE): 4.2e8 counts/(m/s²)
+				data[i] = float64(sample) / 4.2e8
+			} else if strings.Contains(packet.Channel, "HDF") {
+				// 圧力センサー: 1.0e5 counts/Pa (仮定値)
+				data[i] = float64(sample) / 1.0e5
+			} else {
+				// その他のチャンネル: raw counts (変換なし)
+				data[i] = float64(sample)
+			}
+		}
+	} else {
+		// Use raw counts (Python default: deconv=False)
+		for i, sample := range packet.Data {
+			data[i] = float64(sample)
+		}
 	}
 
-	// Debug logging for first few samples
-	if c.totalSamples < 100 && len(data) > 0 {
-		log.Printf("DEBUG: Using raw counts for STA/LTA (Python style): [%v, %v, %v]",
-			packet.Data[0], packet.Data[1], packet.Data[2])
-	}
-
-	// Apply detrend (remove DC offset) before filtering - same as plot consumer
+	// Apply detrend (remove DC offset) before filtering
 	data = dsp.RemoveDCOffset(data)
 
-	// Apply filter if configured using zero-phase filtering - same as plot consumer
+	// Apply filtering if configured (Python implementation also supports filtering)
+	// Note: Python's default configuration has filtering disabled, but when enabled,
+	// it applies the filter before STA/LTA calculation
 	if c.filter != nil {
 		data = c.filter.ApplyZeroPhase(data)
 	}

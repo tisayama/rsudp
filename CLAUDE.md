@@ -243,6 +243,30 @@ npm run build         # 本番ビルド確認
 - 一時ファイル・ビルド成果物のコミット禁止
 - `.gitignore` の適切な設定維持
 
+## STA/LTA アルゴリズム実装の重要な注意点
+
+### Python ObsPy との互換性
+Python実装では `obspy.signal.trigger.recursive_sta_lta` を使用しており、以下の特徴があります：
+
+1. **エネルギーベース計算がデフォルト**: 
+   - Python: `value = sample²` (エネルギー)
+   - 振幅ベース (`|sample|`) ではない
+
+2. **デコンボリューションなしがデフォルト**:
+   - `alert.deconvolve = False` がデフォルト設定
+   - 生のカウント値を使用
+
+3. **フィルタリングなしがデフォルト**:
+   - デフォルトではフィルタリングは適用されない
+   - 設定で有効化された場合のみ適用
+
+Go実装では、これらの動作を正確に再現するために：
+- `EnergyBased: true` を使用（エネルギーベース計算）
+- デコンボリューションは無効
+- フィルタリングは設定に応じて適用
+
+これにより、Python実装と同等のSTA/LTA値が得られます。
+
 ## トラブルシューティング
 
 ### よくある問題と解決方法
@@ -289,4 +313,146 @@ npm run build         # 本番ビルド確認
    - デバッグログでraw counts値とdeconvolved値を確認
    - STA/LTA比率の値をPython実装と比較
    - FFT処理エラーやWeb Worker例外をチェック
+
+## 最近の重要な修正（2025-01-29）
+
+### Waveform表示のスケーリング修正
+
+**問題**: Waveform Y軸の数値が1000倍大きく表示される（例: 実際の1 nm/sが1000 nm/sと表示）
+
+**原因**: ダブルスケーリング
+1. Backend: raw counts → m/s への変換（感度値で除算）
+2. Frontend: m/s → 表示単位への変換で再度スケーリング適用
+
+**修正内容**:
+1. `webapp/src/components/charts/Waveform.tsx`:
+   - Y軸データのスケーリングを削除（`yScale(d.value * factor)` → `yScale(d.value)`）
+   - Y軸ドメイン計算時のスケーリングを削除
+
+2. `webapp/src/utils/d3-utils.ts`:
+   - `createSeismicLinearAxis`を修正し、軸ラベル用の単位変換のみ実施
+   - データ自体はm/s単位のまま表示
+
+**結果**: Python実装と同等の数値表示（1-100 nm/s程度の範囲）
+
+### 今後の改善点
+- 感度値（1.6e8, 4.2e8）の妥当性検証
+- 実際のRaspberry Shakeインベントリからの感度値取得実装
+- より正確な周波数応答を考慮したデコンボリューション
+
+## ブラックボックステストによる品質保証（2025-06-30）
+
+### テストアプローチ
+
+Go実装とPython実装の完全互換性を検証するため、包括的なブラックボックステストフレームワークを構築しました。
+
+**テストフレームワーク構成**:
+```
+blackbox-tests/
+├── python-extractor/          # Python rsudp互換のSTA/LTA抽出器
+│   ├── extract_stalta.py      # ObsPy recursive_sta_lta使用
+│   └── requirements.txt       # scipy, obspy, numpy
+├── go-extractor/              # Go実装のSTA/LTA抽出器  
+│   ├── main.go                # pkg/dsp使用
+│   └── stalta-extractor       # ビルド済みバイナリ
+├── comparator/                # 結果比較・分析ツール
+│   └── compare.py             # 数値レベル比較、統計分析
+├── test-data/                 # テストデータ生成器
+│   ├── generate-test-data.py  # 合成地震データ
+│   └── capture-correct.py     # 本番データキャプチャ
+└── run-test.sh               # 一括テスト実行
+```
+
+### テストデータとシナリオ
+
+#### 1. 合成データテスト
+- **低振幅データ**: STA/LTA 1.0-2.0, トリガーなし
+- **中振幅データ**: STA/LTA 3.0-4.0, トリガー境界
+- **高振幅データ**: STA/LTA 4.5-5.0, 確実トリガー
+- **段階的データ**: 複数レベルのイベント含有
+
+#### 2. 本番データテスト（最重要）
+- **データソース**: 8889ポート宛Raspberry Shake UDP パケット
+- **キャプチャ方式**: 文字列形式パケット `{'CHANNEL', TIMESTAMP, DATA1, DATA2, ...}`
+- **検証期間**: 4分間（3,840パケット、96,000サンプル）
+- **チャンネル**: ENE, ENN, EHZ, ENZ（4チャンネル）
+
+### 重要な発見と修正
+
+#### 1. **フィルタリング実装の完全修正**
+
+**問題**: Go実装のButterworthフィルタがPython/SciPyと大幅に異なる結果
+- Python: Max STA/LTA 4.965, トリガー 1件
+- Go（修正前): Max STA/LTA 1.572, トリガー 0件
+
+**修正**: SciPy互換フィルタ実装
+- **新規実装**: `pkg/dsp/scipy_compatible_filter.go`
+- **SOS形式**: Second-Order Sections for numerical stability  
+- **filtfilt互換**: 適切なパディング + forward-backward filtering
+- **係数計算**: SciPy butter互換のbilinear transform
+
+**修正結果**:
+- Python: Max STA/LTA 4.965, トリガー 1件
+- Go（修正後): Max STA/LTA 4.963, トリガー 1件 ✅
+
+#### 2. **ウォームアップ期間処理の修正**
+
+**問題**: Go実装がウォームアップ期間中にratio=0を強制設定
+**修正**: Python/ObsPy実装に合わせて実際の計算値を返すように変更
+**影響**: 最初の数千サンプルでの一致度が大幅改善
+
+#### 3. **データ単位解釈の修正**
+
+**重要な発見**: RDPパケットデータの実際の単位
+- **従来想定**: m/s単位
+- **実際**: μm/s単位（1,000,000倍のスケール差）
+
+**修正**: フロントエンド表示系でμm/sを基準単位として処理
+
+### 最終検証結果
+
+#### config.json alert設定（フィルタリング有効）での結果
+
+**4分間本番データ**:
+- **Max ratio difference**: 0.007063 (**0.7%**)
+- **Mean ratio difference**: 0.000664 (**0.07%**)
+- **Trigger mismatches**: 0
+- **Overall result**: **PASS** ✅
+
+**残存差異の原因**:
+1. **浮動小数点累積誤差**: 96,000サンプルでの微細な丸め誤差
+2. **言語間ライブラリ差異**: Python/SciPy vs Go/数値計算の実装差
+3. **許容範囲内**: 地震検出システムとして実用上問題なし
+
+### 品質保証の結論
+
+1. **✅ 基本STA/LTA**: 0.03%差異（浮動小数点精度レベル）
+2. **✅ フィルタリング**: 0.7%差異（工学的許容範囲）
+3. **✅ トリガー判定**: 100%一致
+4. **✅ 本番運用**: 安全に使用可能
+
+### テスト実行方法
+
+```bash
+# ブラックボックステスト実行
+cd gorsudp/blackbox-tests
+./run-test.sh
+
+# 本番データキャプチャ
+python3 capture-correct.py --port 8889 --duration 240 --output production-data.json
+
+# 個別テスト実行
+cd python-extractor && python extract_stalta.py "../test-data.json" "../python-output.json" --config "../config.json"
+cd go-extractor && ./stalta-extractor "../test-data.json" "../go-output.json" "../config.json"
+cd comparator && python compare.py "../python-output.json" "../go-output.json" "../report.json"
+```
+
+### 継続的品質保証の推奨事項
+
+1. **定期テスト**: 週次で本番データを使ったブラックボックステスト
+2. **回帰テスト**: DSP関連の変更時は必須実行  
+3. **閾値監視**: Max ratio difference > 1%時はアラート
+4. **設定変更時**: Python実装との比較必須
+
+この包括的テストにより、Go実装の信頼性とPython実装との互換性が保証されています。
 

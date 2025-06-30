@@ -1,0 +1,71 @@
+{
+  "metadata": {
+    "comparison_timestamp": "2025-06-30T13:39:27.895311Z",
+    "python_implementation": {
+      "timestamp": "2025-06-30T13:39:10.970889Z",
+      "implementation": "python",
+      "config": {
+        "sta_duration": 6.0,
+        "lta_duration": 30.0,
+        "threshold": 3.95,
+        "reset": 0.9,
+        "sample_rate": 100.0,
+        "deconv": true,
+        "filter_enabled": true,
+        "highpass": 0.8,
+        "lowpass": 9.0,
+        "filter_corners": 2
+      },
+      "total_samples": 12000,
+      "trigger_count": 1
+    },
+    "go_implementation": {
+      "timestamp": "2025-06-30T13:39:11Z",
+      "implementation": "go",
+      "config": {
+        "sta_duration": 6,
+        "lta_duration": 30,
+        "threshold": 3.95,
+        "reset": 0.9,
+        "sample_rate": 100,
+        "deconv": true,
+        "filter_enabled": true,
+        "highpass": 0.8,
+        "lowpass": 9,
+        "filter_corners": 2
+      },
+      "total_samples": 12000,
+      "trigger_count": 0
+    }
+  },
+  "summary": {
+    "total_samples": 9000,
+    "max_sta_diff": 500499676708.33386,
+    "max_lta_diff": 490949726397.0275,
+    "max_ratio_diff": 3.809344463760288,
+    "mean_ratio_diff": 0.7400694151047131,
+    "trigger_mismatches": 1575,
+    "overall_pass": false
+  },
+  "detailed_statistics": {
+    "sta_diffs_min": 496247998845.88446,
+    "sta_diffs_max": 500499676708.33386,
+    "sta_diffs_mean": 499777997690.8613,
+    "sta_diffs_std": 704837159.5373156,
+    "sta_diffs_median": 499582981778.6282,
+    "lta_diffs_min": 316226554501.6547,
+    "lta_diffs_max": 490949726397.0275,
+    "lta_diffs_mean": 441797653820.7966,
+    "lta_diffs_std": 47190216555.06251,
+    "lta_diffs_median": 459002880913.4823,
+    "ratio_diffs_min": 7.038710493789679e-06,
+    "ratio_diffs_max": 3.809344463760288,
+    "ratio_diffs_mean": 0.7400694151047131,
+    "ratio_diffs_std": 0.7327445882827748,
+    "ratio_diffs_median": 0.8139607293532739
+  },
+  "tolerances": {
+    "ratio_tolerance": 0.01,
+    "trigger_tolerance": 0
+  }
+}

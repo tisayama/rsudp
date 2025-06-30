@@ -90,6 +90,8 @@ func NewSTALTAProcessor(config STALTAConfig) (*STALTAProcessor, error) {
 		useRecursive: config.UseRecursive,
 		energyBased:  config.EnergyBased,
 		ratio:        0.0,
+		staMean:      0.0,                        // ObsPy initializes STA to 0
+		ltaMean:      2.2250738585072014e-308,    // ObsPy initializes LTA to np.finfo(0.0).tiny to avoid zero division
 	}
 
 	// Initialize buffers if not using recursive calculation
@@ -128,44 +130,32 @@ func (p *STALTAProcessor) ProcessSlice(samples []float64) ([]bool, []float64) {
 	return triggers, ratios
 }
 
-// processRecursive implements the recursive STA/LTA algorithm for efficiency
+// processRecursive implements the recursive STA/LTA algorithm matching ObsPy implementation
 func (p *STALTAProcessor) processRecursive(sample float64) (bool, float64) {
-	// Calculate the value to use (energy or amplitude)
-	value := sample
-	if p.energyBased {
-		value = sample * sample // Energy = amplitude^2
-	} else {
-		value = math.Abs(sample) // Absolute amplitude
-	}
+	// Calculate the value to use (energy: amplitude^2, matching ObsPy)
+	value := sample * sample // ObsPy always uses squared values (energy)
 
-	// Recursive STA calculation
-	// STA[n] = STA[n-1] + (x[n] - STA[n-1]) / N_STA
-	if p.sampleCount <= int64(p.staWindow) {
-		// Initialize STA during warmup
-		p.staMean = (p.staMean*float64(p.sampleCount-1) + value) / float64(p.sampleCount)
-	} else {
-		// Recursive update
-		alpha := 1.0 / float64(p.staWindow)
-		p.staMean = p.staMean + alpha*(value-p.staMean)
-	}
+	// Calculate coefficients (matching ObsPy formula)
+	csta := 1.0 / float64(p.staWindow)  // 1/nsta
+	clta := 1.0 / float64(p.ltaWindow)  // 1/nlta
+	icsta := 1.0 - csta                 // 1 - csta
+	iclta := 1.0 - clta                 // 1 - clta
 
-	// Recursive LTA calculation
-	// LTA[n] = LTA[n-1] + (x[n] - LTA[n-1]) / N_LTA
-	if p.sampleCount <= int64(p.ltaWindow) {
-		// Initialize LTA during warmup
-		p.ltaMean = (p.ltaMean*float64(p.sampleCount-1) + value) / float64(p.sampleCount)
-	} else {
-		// Recursive update
-		alpha := 1.0 / float64(p.ltaWindow)
-		p.ltaMean = p.ltaMean + alpha*(value-p.ltaMean)
-	}
+	// ObsPy recursive formula: sta = csta * a[i] + icsta * sta
+	p.staMean = csta*value + icsta*p.staMean
 
-	// Calculate STA/LTA ratio
+	// ObsPy recursive formula: lta = clta * a[i] + iclta * lta  
+	p.ltaMean = clta*value + iclta*p.ltaMean
+
+	// Calculate STA/LTA ratio (avoid division by zero)
 	if p.ltaMean > 0 {
 		p.ratio = p.staMean / p.ltaMean
 	} else {
 		p.ratio = 0
 	}
+
+	// Note: Removed forced ratio=0 during warmup period
+	// Python/ObsPy implementation actually returns calculated ratios from the first sample
 
 	// Check trigger conditions
 	return p.checkTrigger(), p.ratio
@@ -173,13 +163,8 @@ func (p *STALTAProcessor) processRecursive(sample float64) (bool, float64) {
 
 // processExact implements exact STA/LTA calculation using circular buffers
 func (p *STALTAProcessor) processExact(sample float64) (bool, float64) {
-	// Calculate the value to use (energy or amplitude)
-	value := sample
-	if p.energyBased {
-		value = sample * sample
-	} else {
-		value = math.Abs(sample)
-	}
+	// Calculate the value to use (energy: amplitude^2, matching ObsPy)
+	value := sample * sample // ObsPy always uses squared values (energy)
 
 	// Update STA buffer and calculate exact mean
 	oldSTAValue := p.staBuffer[p.staIndex]
@@ -225,6 +210,9 @@ func (p *STALTAProcessor) processExact(sample float64) (bool, float64) {
 	} else {
 		p.ratio = 0
 	}
+
+	// Note: Removed forced ratio=0 during warmup period
+	// Python/ObsPy implementation actually returns calculated ratios from the first sample
 
 	// Check trigger conditions
 	return p.checkTrigger(), p.ratio
@@ -279,13 +267,13 @@ func (p *STALTAProcessor) GetLTA() float64 {
 	return p.ltaMean
 }
 
-// Reset resets the processor state
+// Reset resets the processor state (matching ObsPy initialization)
 func (p *STALTAProcessor) Reset() {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
 
-	p.staMean = 0
-	p.ltaMean = 0
+	p.staMean = 0.0                        // ObsPy initializes STA to 0
+	p.ltaMean = 2.2250738585072014e-308    // ObsPy initializes LTA to np.finfo(0.0).tiny
 	p.staVariance = 0
 	p.ltaVariance = 0
 	p.triggered = false

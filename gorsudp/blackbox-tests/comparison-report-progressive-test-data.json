@@ -1,0 +1,71 @@
+{
+  "metadata": {
+    "comparison_timestamp": "2025-06-30T13:16:48.775953Z",
+    "python_implementation": {
+      "timestamp": "2025-06-30T13:16:47.467098Z",
+      "implementation": "python",
+      "config": {
+        "sta_duration": 6.0,
+        "lta_duration": 30.0,
+        "threshold": 3.95,
+        "reset": 0.9,
+        "sample_rate": 100.0,
+        "deconv": true,
+        "filter_enabled": false,
+        "highpass": 0.8,
+        "lowpass": 9.0,
+        "filter_corners": 2
+      },
+      "total_samples": 12000,
+      "trigger_count": 0
+    },
+    "go_implementation": {
+      "timestamp": "2025-06-30T13:16:47Z",
+      "implementation": "go",
+      "config": {
+        "sta_duration": 6,
+        "lta_duration": 30,
+        "threshold": 3.95,
+        "reset": 0.9,
+        "sample_rate": 100,
+        "deconv": true,
+        "filter_enabled": false,
+        "highpass": 0.8,
+        "lowpass": 9,
+        "filter_corners": 2
+      },
+      "total_samples": 12000,
+      "trigger_count": 0
+    }
+  },
+  "summary": {
+    "total_samples": 9000,
+    "max_sta_diff": 0.0,
+    "max_lta_diff": 0.0,
+    "max_ratio_diff": 0.0030581091479797706,
+    "mean_ratio_diff": 0.000325384797743583,
+    "trigger_mismatches": 0,
+    "overall_pass": true
+  },
+  "detailed_statistics": {
+    "sta_diffs_min": 0.0,
+    "sta_diffs_max": 0.0,
+    "sta_diffs_mean": 0.0,
+    "sta_diffs_std": 0.0,
+    "sta_diffs_median": 0.0,
+    "lta_diffs_min": 0.0,
+    "lta_diffs_max": 0.0,
+    "lta_diffs_mean": 0.0,
+    "lta_diffs_std": 0.0,
+    "lta_diffs_median": 0.0,
+    "ratio_diffs_min": 2.610735345687232e-07,
+    "ratio_diffs_max": 0.0030581091479797706,
+    "ratio_diffs_mean": 0.000325384797743583,
+    "ratio_diffs_std": 0.0006543286734749704,
+    "ratio_diffs_median": 3.41888138392088e-05
+  },
+  "tolerances": {
+    "ratio_tolerance": 0.01,
+    "trigger_tolerance": 0
+  }
+}

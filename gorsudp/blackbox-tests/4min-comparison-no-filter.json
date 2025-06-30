@@ -1,0 +1,71 @@
+{
+  "metadata": {
+    "comparison_timestamp": "2025-06-30T14:46:54.447039Z",
+    "python_implementation": {
+      "timestamp": "2025-06-30T14:46:38.769621Z",
+      "implementation": "python",
+      "config": {
+        "sta_duration": 6.0,
+        "lta_duration": 30.0,
+        "threshold": 3.95,
+        "reset": 0.9,
+        "sample_rate": 100.0,
+        "deconv": true,
+        "filter_enabled": false,
+        "highpass": 0.8,
+        "lowpass": 9.0,
+        "filter_corners": 2
+      },
+      "total_samples": 96000,
+      "trigger_count": 0
+    },
+    "go_implementation": {
+      "timestamp": "2025-06-30T14:46:39Z",
+      "implementation": "go",
+      "config": {
+        "sta_duration": 6,
+        "lta_duration": 30,
+        "threshold": 3.95,
+        "reset": 0.9,
+        "sample_rate": 100,
+        "deconv": true,
+        "filter_enabled": false,
+        "highpass": 0.8,
+        "lowpass": 9,
+        "filter_corners": 2
+      },
+      "total_samples": 96000,
+      "trigger_count": 0
+    }
+  },
+  "summary": {
+    "total_samples": 93000,
+    "max_sta_diff": 9.643438651617912e-05,
+    "max_lta_diff": 9.323635334644488e-05,
+    "max_ratio_diff": 0.0003182347246808437,
+    "mean_ratio_diff": 6.309980188270557e-05,
+    "trigger_mismatches": 0,
+    "overall_pass": true
+  },
+  "detailed_statistics": {
+    "sta_diffs_min": 8.182247627599618e-05,
+    "sta_diffs_max": 9.643438651617912e-05,
+    "sta_diffs_mean": 9.238244106078621e-05,
+    "sta_diffs_std": 2.3304644969459663e-06,
+    "sta_diffs_median": 9.231006672669661e-05,
+    "lta_diffs_min": 5.641841497169789e-05,
+    "lta_diffs_max": 9.323635334644488e-05,
+    "lta_diffs_mean": 9.128906319804814e-05,
+    "lta_diffs_std": 4.365309021789906e-06,
+    "lta_diffs_median": 9.226186675424373e-05,
+    "ratio_diffs_min": 1.8992762917946493e-09,
+    "ratio_diffs_max": 0.0003182347246808437,
+    "ratio_diffs_mean": 6.309980188270557e-05,
+    "ratio_diffs_std": 4.5428301983525655e-05,
+    "ratio_diffs_median": 5.4493367524499625e-05
+  },
+  "tolerances": {
+    "ratio_tolerance": 0.01,
+    "trigger_tolerance": 0
+  }
+}

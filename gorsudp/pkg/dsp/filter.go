@@ -36,58 +36,35 @@ type ButterworthFilter struct {
 	freqHigh   float64 // High cutoff frequency (Hz)
 	sampleRate float64 // Sample rate (Hz)
 
-	// Filter coefficients
+	// Filter coefficients (legacy)
 	a []float64 // Denominator coefficients
 	b []float64 // Numerator coefficients
 
-	// Filter state (delay line)
+	// Filter state (delay line) (legacy)
 	x []float64 // Input history
 	y []float64 // Output history
+	
+	// SciPy-compatible filter implementation
+	scipyFilter *ScipyCompatibleFilter
 }
 
-// NewButterworthFilter creates a new Butterworth filter
+// NewButterworthFilter creates a new Butterworth filter using SciPy-compatible implementation
 func NewButterworthFilter(filterType FilterType, order int, freqLow, freqHigh, sampleRate float64) (*ButterworthFilter, error) {
-	if order <= 0 || order > 10 {
-		return nil, fmt.Errorf("filter order must be between 1 and 10")
+	// Create SciPy-compatible filter
+	scipyFilter, err := NewScipyCompatibleFilter(filterType, order, freqLow, freqHigh, sampleRate)
+	if err != nil {
+		return nil, err
 	}
 
-	if sampleRate <= 0 {
-		return nil, fmt.Errorf("sample rate must be positive")
-	}
-
-	// Validate frequencies
-	nyquist := sampleRate / 2
-	switch filterType {
-	case FilterLowpass:
-		if freqHigh <= 0 || freqHigh >= nyquist {
-			return nil, fmt.Errorf("lowpass cutoff frequency must be between 0 and %f Hz", nyquist)
-		}
-	case FilterHighpass:
-		if freqLow <= 0 || freqLow >= nyquist {
-			return nil, fmt.Errorf("highpass cutoff frequency must be between 0 and %f Hz", nyquist)
-		}
-	case FilterBandpass:
-		if freqLow <= 0 || freqHigh <= 0 || freqLow >= freqHigh || freqHigh >= nyquist {
-			return nil, fmt.Errorf("bandpass frequencies must satisfy 0 < freqLow < freqHigh < %f Hz", nyquist)
-		}
-	}
-
+	// Create ButterworthFilter wrapper for backward compatibility
 	filter := &ButterworthFilter{
 		filterType: filterType,
 		order:      order,
 		freqLow:    freqLow,
 		freqHigh:   freqHigh,
 		sampleRate: sampleRate,
+		scipyFilter: scipyFilter,
 	}
-
-	// Calculate filter coefficients
-	if err := filter.calculateCoefficients(); err != nil {
-		return nil, fmt.Errorf("failed to calculate filter coefficients: %v", err)
-	}
-
-	// Initialize delay lines
-	filter.x = make([]float64, len(filter.b))
-	filter.y = make([]float64, len(filter.a))
 
 	return filter, nil
 }
@@ -187,7 +164,10 @@ func (f *ButterworthFilter) calculateHighpassCoefficients() error {
 
 // calculateBandpassCoefficients calculates coefficients for a bandpass filter
 func (f *ButterworthFilter) calculateBandpassCoefficients() error {
-	// Normalized frequencies
+	// Force to 2nd order for stability and compatibility with Python implementation
+	f.order = 2
+	
+	// Normalized frequencies (0 to 1, where 1 is Nyquist)
 	wl := f.freqLow / (f.sampleRate / 2)
 	wh := f.freqHigh / (f.sampleRate / 2)
 
@@ -202,20 +182,36 @@ func (f *ButterworthFilter) calculateBandpassCoefficients() error {
 		wl = wh - 0.01
 	}
 
+	// Design bandpass filter using standard approach
 	// Calculate center frequency and bandwidth
-	wc := math.Sqrt(wl * wh)
-	bw := wh - wl
-
-	// Force to 2nd order for stability
-	f.order = 2
-
-	// Second order bandpass Butterworth using more stable formulation
+	wc := math.Sqrt(wl * wh)  // Geometric mean
+	bw := wh - wl             // Bandwidth
+	
+	// Calculate Q factor
 	Q := wc / bw
-	K := math.Tan(math.Pi * wc / 2)
+	
+	// Convert to analog domain for bilinear transform
+	// Prewarp frequencies
+	wcPrewarp := math.Tan(math.Pi * wc / 2)
+	
+	// Calculate digital filter coefficients using bilinear transform
+	// For 2nd order Butterworth bandpass
+	K := wcPrewarp
 	norm := 1.0 / (1.0 + K/Q + K*K)
-
-	f.b = []float64{K / Q * norm, 0, -K / Q * norm}
-	f.a = []float64{1, 2.0 * (K*K - 1.0) * norm, (1.0 - K/Q + K*K) * norm}
+	
+	// Numerator coefficients (zeros)
+	f.b = []float64{
+		K / Q * norm,    // b0
+		0.0,             // b1
+		-K / Q * norm,   // b2
+	}
+	
+	// Denominator coefficients (poles)
+	f.a = []float64{
+		1.0,                           // a0 (always 1)
+		2.0 * (K*K - 1.0) * norm,     // a1
+		(1.0 - K/Q + K*K) * norm,     // a2
+	}
 
 	return nil
 }
@@ -246,6 +242,12 @@ func (f *ButterworthFilter) Apply(input float64) float64 {
 	// Check for invalid input
 	if math.IsNaN(input) || math.IsInf(input, 0) {
 		input = 0.0
+	}
+
+	// Limit input to prevent numerical issues
+	const maxInput = 1e6
+	if math.Abs(input) > maxInput {
+		input = maxInput * (input / math.Abs(input))
 	}
 
 	// Shift input history
@@ -280,9 +282,16 @@ func (f *ButterworthFilter) Apply(input float64) float64 {
 	}
 
 	// Limit extreme values to prevent numerical issues
-	const maxAmplitude = 1e10
+	const maxAmplitude = 1e6
 	if math.Abs(output) > maxAmplitude {
 		output = maxAmplitude * (output / math.Abs(output))
+		// Also reset state to prevent continued instability
+		for j := range f.x {
+			f.x[j] = 0.0
+		}
+		for j := range f.y {
+			f.y[j] = 0.0
+		}
 	}
 
 	// Shift output history
@@ -306,26 +315,82 @@ func (f *ButterworthFilter) ApplySlice(input []float64) []float64 {
 // ApplyZeroPhase applies the filter in forward and backward direction for zero-phase response
 // This is similar to ObsPy's filtfilt (forward-backward filtering)
 func (f *ButterworthFilter) ApplyZeroPhase(input []float64) []float64 {
+	if f.scipyFilter != nil {
+		return f.scipyFilter.ApplyZeroPhase(input)
+	}
+	
+	// Legacy implementation fallback (not recommended)
+	if len(input) == 0 {
+		return input
+	}
+	
+	// Create a working copy
+	data := make([]float64, len(input))
+	copy(data, input)
+	
+	// Apply padding to reduce edge effects (like SciPy's filtfilt)
+	padLen := 3 * (len(f.a) - 1)
+	if padLen > len(data)/2 {
+		padLen = len(data) / 2
+	}
+	
+	if padLen > 0 {
+		// Pad at beginning
+		padBegin := make([]float64, padLen)
+		for i := 0; i < padLen; i++ {
+			padBegin[i] = 2*data[0] - data[padLen-i]
+		}
+		
+		// Pad at end
+		padEnd := make([]float64, padLen)
+		for i := 0; i < padLen; i++ {
+			padEnd[i] = 2*data[len(data)-1] - data[len(data)-1-i-1]
+		}
+		
+		// Combine padded data
+		paddedData := make([]float64, 0, len(padBegin)+len(data)+len(padEnd))
+		paddedData = append(paddedData, padBegin...)
+		paddedData = append(paddedData, data...)
+		paddedData = append(paddedData, padEnd...)
+		
+		data = paddedData
+	}
+	
 	// First pass: forward filtering
-	forward := make([]float64, len(input))
+	forward := make([]float64, len(data))
 	f.Reset() // Reset filter state
-	for i, sample := range input {
-		forward[i] = f.Apply(sample)
+	for i, sample := range data {
+		// Check for numerical issues
+		if math.IsNaN(sample) || math.IsInf(sample, 0) {
+			forward[i] = 0.0
+		} else {
+			forward[i] = f.Apply(sample)
+		}
 	}
 
-	// Second pass: backward filtering
-	output := make([]float64, len(input))
+	// Second pass: backward filtering  
 	f.Reset() // Reset filter state
 	for i := len(forward) - 1; i >= 0; i-- {
-		output[i] = f.Apply(forward[i])
+		sample := forward[i]
+		// Check for numerical issues
+		if math.IsNaN(sample) || math.IsInf(sample, 0) {
+			forward[i] = 0.0
+		} else {
+			forward[i] = f.Apply(sample)
+		}
 	}
 
 	// Reverse the output to get correct time order
-	for i, j := 0, len(output)-1; i < j; i, j = i+1, j-1 {
-		output[i], output[j] = output[j], output[i]
+	for i, j := 0, len(forward)-1; i < j; i, j = i+1, j-1 {
+		forward[i], forward[j] = forward[j], forward[i]
 	}
-
-	return output
+	
+	// Remove padding and return
+	if padLen > 0 && len(forward) > 2*padLen {
+		return forward[padLen : len(forward)-padLen]
+	}
+	
+	return forward
 }
 
 // Reset resets the filter's internal state

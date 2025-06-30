@@ -1,0 +1,12 @@
+{
+  "sta_duration": 6.0,
+  "lta_duration": 30.0,
+  "threshold": 3.95,
+  "reset": 0.9,
+  "sample_rate": 100.0,
+  "deconv": true,
+  "filter_enabled": true,
+  "highpass": 0.8,
+  "lowpass": 9.0,
+  "filter_corners": 2
+}
